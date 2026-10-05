@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -8,6 +7,7 @@
     <title>Mis correos temporales</title>
 
     <style>
+
         body {
             font-family: Arial, sans-serif;
             background: #f2f2f2;
@@ -61,6 +61,20 @@
             padding: 15px;
             margin-top: 10px;
             border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .mensaje:hover {
+            background: #f7f7f7;
+        }
+
+        .contenido {
+            background: #fafafa;
+            border-top: 1px solid #ddd;
+            margin-top: 15px;
+            padding-top: 15px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .error {
@@ -73,6 +87,11 @@
             margin-top: 15px;
             color: #555;
         }
+
+        .oculto {
+            display: none;
+        }
+
     </style>
 </head>
 
@@ -82,11 +101,16 @@
 
     <h1>📧 Mis correos temporales</h1>
 
-    <button id="btnCrear" onclick="crearCorreo()">
+    <button
+        id="btnCrear"
+        onclick="crearCorreo()">
         CREAR NUEVO CORREO
     </button>
 
-    <button onclick="actualizarMensajes()">
+    <button
+        id="btnActualizar"
+        onclick="actualizarMensajes()"
+        disabled>
         ACTUALIZAR BANDEJA
     </button>
 
@@ -105,184 +129,66 @@
 
 <script>
 
-const API = "https://correos-temporales-api.cuentaspremiumjd.workers.dev/mailtm";
+const API =
+    "https://correos-temporales-api.cuentaspremiumjd.workers.dev";
 
-let token = null;
+
+let sidToken = null;
 let direccionActual = null;
+let secuencia = 0;
 
 
-/* =========================================
-   CREAR CORREO
-========================================= */
+// ========================================
+// CREAR CORREO
+// ========================================
 
 async function crearCorreo() {
 
-    const boton = document.getElementById("btnCrear");
+    const boton =
+        document.getElementById("btnCrear");
 
     boton.disabled = true;
 
     document.getElementById("estado").textContent =
-        "⏳ Creando correo...";
+        "⏳ Creando nuevo correo...";
 
     try {
 
-        /*
-         * 1. OBTENER DOMINIO
-         */
+        const respuesta =
+            await fetch(API + "/crear");
 
-        const respuestaDominios = await fetch(
-            API + "/domains?page=1",
-            {
-                headers: {
-                    "Accept": "application/json"
-                }
-            }
-        );
-
-        if (!respuestaDominios.ok) {
+        if (!respuesta.ok) {
 
             throw new Error(
-                "Mail.tm respondió con HTTP " +
-                respuestaDominios.status
+                "El Worker respondió HTTP " +
+                respuesta.status
+            );
+        }
+
+        const datos =
+            await respuesta.json();
+
+        if (!datos.email_addr ||
+            !datos.sid_token) {
+
+            throw new Error(
+                "Guerrilla Mail no ha devuelto un correo válido."
             );
         }
 
 
-        const datosDominios =
-            await respuestaDominios.json();
+        direccionActual =
+            datos.email_addr;
+
+        sidToken =
+            datos.sid_token;
+
+        secuencia = 0;
 
 
-        const listaDominios =
-    Array.isArray(datosDominios)
-        ? datosDominios
-        : datosDominios["hydra:member"];
-
-
-        if (!listaDominios ||
-            listaDominios.length === 0) {
-
-            throw new Error(
-                "Mail.tm no ha devuelto ningún dominio."
-            );
-        }
-
-
-        const dominio =
-            listaDominios[0].domain;
-
-
-        /*
-         * 2. CREAR USUARIO ALEATORIO
-         */
-
-        const usuario =
-            generarUsuarioAleatorio();
-
-        const password =
-            generarPasswordAleatoria();
-
-        const direccion =
-            usuario + "@" + dominio;
-
-
-        /*
-         * 3. CREAR CUENTA
-         */
-
-        document.getElementById("estado").textContent =
-            "⏳ Creando la cuenta " + direccion + "...";
-
-
-        const respuestaCuenta =
-            await fetch(
-                API + "/accounts",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        address: direccion,
-                        password: password
-                    })
-                }
-            );
-
-
-        if (!respuestaCuenta.ok) {
-
-            const textoError =
-                await respuestaCuenta.text();
-
-            throw new Error(
-                "No se pudo crear la cuenta.\n\n" +
-                "HTTP: " +
-                respuestaCuenta.status +
-                "\n\n" +
-                textoError
-            );
-        }
-
-
-        /*
-         * 4. OBTENER TOKEN
-         */
-
-        document.getElementById("estado").textContent =
-            "⏳ Obteniendo acceso a la bandeja...";
-
-
-        const respuestaToken =
-            await fetch(
-                API + "/token",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        address: direccion,
-                        password: password
-                    })
-                }
-            );
-
-
-        if (!respuestaToken.ok) {
-
-            const textoError =
-                await respuestaToken.text();
-
-            throw new Error(
-                "No se pudo obtener el token.\n\n" +
-                "HTTP: " +
-                respuestaToken.status +
-                "\n\n" +
-                textoError
-            );
-        }
-
-
-        const datosToken =
-            await respuestaToken.json();
-
-
-        token = datosToken.token;
-
-        direccionActual = direccion;
-
-
-        /*
-         * 5. MOSTRAR CORREO
-         */
-
-        document.getElementById("datosCorreo").innerHTML = `
+        document.getElementById(
+            "datosCorreo"
+        ).innerHTML = `
 
             <div class="correo">
 
@@ -291,16 +197,8 @@ async function crearCorreo() {
                 <br><br>
 
                 <span id="direccion">
-                    ${direccion}
+                    ${direccionActual}
                 </span>
-
-                <br><br>
-
-                <strong>Contraseña:</strong>
-
-                <br><br>
-
-                ${password}
 
                 <br><br>
 
@@ -309,134 +207,102 @@ async function crearCorreo() {
                 </button>
 
             </div>
-
         `;
 
 
-        document.getElementById("estado").textContent =
+        document.getElementById(
+            "bandeja"
+        ).innerHTML =
+            "📭 No hay mensajes todavía.";
+
+
+        document.getElementById(
+            "btnActualizar"
+        ).disabled = false;
+
+
+        document.getElementById(
+            "estado"
+        ).textContent =
             "✅ Correo creado correctamente.";
 
 
-        document.getElementById("bandeja").innerHTML =
-            "📭 No hay mensajes todavía.";
+        // Comprobamos automáticamente
+        // si ya hay mensajes
+
+        await actualizarMensajes();
 
     }
-
 
     catch (error) {
 
         console.error(error);
 
-        document.getElementById("estado").innerHTML =
+        document.getElementById(
+            "estado"
+        ).innerHTML =
             '<div class="error">' +
-            "❌ ERROR\n\n" +
+            '❌ ERROR\n\n' +
             error.message +
-            "</div>";
-    }
+            '</div>';
 
+    }
 
     finally {
 
         boton.disabled = false;
 
     }
+
 }
 
 
-/* =========================================
-   USUARIO ALEATORIO
-========================================= */
+// ========================================
+// COPIAR CORREO
+// ========================================
 
-function generarUsuarioAleatorio() {
+async function copiarCorreo() {
 
-    const caracteres =
-        "abcdefghijklmnopqrstuvwxyz" +
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-        "0123456789";
-
-
-    let resultado = "";
-
-
-    for (let i = 0; i < 14; i++) {
-
-        resultado +=
-            caracteres.charAt(
-                Math.floor(
-                    Math.random() *
-                    caracteres.length
-                )
-            );
-
-    }
-
-
-    return resultado;
-}
-
-
-/* =========================================
-   CONTRASEÑA ALEATORIA
-========================================= */
-
-function generarPasswordAleatoria() {
-
-    const caracteres =
-        "abcdefghijklmnopqrstuvwxyz" +
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-        "0123456789" +
-        "!@#$%";
-
-
-    let resultado = "";
-
-
-    for (let i = 0; i < 18; i++) {
-
-        resultado +=
-            caracteres.charAt(
-                Math.floor(
-                    Math.random() *
-                    caracteres.length
-                )
-            );
-
-    }
-
-
-    return resultado;
-}
-
-
-/* =========================================
-   COPIAR CORREO
-========================================= */
-
-function copiarCorreo() {
-
-    if (!direccionActual)
+    if (!direccionActual) {
         return;
+    }
 
+    try {
 
-    navigator.clipboard.writeText(
-        direccionActual
-    );
+        await navigator.clipboard.writeText(
+            direccionActual
+        );
 
+        document.getElementById(
+            "estado"
+        ).textContent =
+            "📋 Correo copiado al portapapeles.";
 
-    document.getElementById("estado").textContent =
-        "📋 Correo copiado al portapapeles.";
+    }
+
+    catch (error) {
+
+        document.getElementById(
+            "estado"
+        ).textContent =
+            "No se pudo copiar automáticamente.";
+
+    }
+
 }
 
 
-/* =========================================
-   ACTUALIZAR BANDEJA
-========================================= */
+// ========================================
+// ACTUALIZAR BANDEJA
+// ========================================
 
 async function actualizarMensajes() {
 
-    if (!token) {
+    if (!sidToken) {
 
-        document.getElementById("estado").textContent =
+        document.getElementById(
+            "estado"
+        ).textContent =
             "Primero crea un correo.";
 
         return;
@@ -445,29 +311,26 @@ async function actualizarMensajes() {
 
     try {
 
-        document.getElementById("estado").textContent =
+        document.getElementById(
+            "estado"
+        ).textContent =
             "⏳ Consultando bandeja...";
 
 
         const respuesta =
             await fetch(
-                API + "/messages",
-                {
-                    headers: {
-                        "Authorization":
-                            "Bearer " + token,
-
-                        "Accept":
-                            "application/json"
-                    }
-                }
+                API +
+                "/bandeja?sid_token=" +
+                encodeURIComponent(sidToken) +
+                "&seq=" +
+                secuencia
             );
 
 
         if (!respuesta.ok) {
 
             throw new Error(
-                "Mail.tm respondió HTTP " +
+                "El Worker respondió HTTP " +
                 respuesta.status
             );
         }
@@ -478,15 +341,19 @@ async function actualizarMensajes() {
 
 
         const mensajes =
-            datos["hydra:member"] || [];
+            datos.list || [];
 
 
         if (mensajes.length === 0) {
 
-            document.getElementById("bandeja").innerHTML =
+            document.getElementById(
+                "bandeja"
+            ).innerHTML =
                 "📭 No hay mensajes todavía.";
 
-            document.getElementById("estado").textContent =
+            document.getElementById(
+                "estado"
+            ).textContent =
                 "Bandeja actualizada.";
 
             return;
@@ -496,59 +363,194 @@ async function actualizarMensajes() {
         let html = "";
 
 
-        mensajes.forEach(function(mensaje) {
+        mensajes.forEach(
+            function(mensaje) {
 
-            html += `
+                html += `
 
-                <div class="mensaje">
+                    <div
+                        class="mensaje"
+                        onclick="leerMensaje('${mensaje.mail_id}')"
+                    >
 
-                    <strong>De:</strong><br>
+                        <strong>
+                            De:
+                        </strong>
+                        ${escapeHtml(
+                            mensaje.mail_from ||
+                            "Desconocido"
+                        )}
 
-                    ${mensaje.from?.address || "Desconocido"}
+                        <br><br>
 
-                    <br><br>
+                        <strong>
+                            Asunto:
+                        </strong>
+                        ${escapeHtml(
+                            mensaje.mail_subject ||
+                            "(sin asunto)"
+                        )}
 
-                    <strong>Asunto:</strong><br>
+                        <br><br>
 
-                    ${mensaje.subject || "(sin asunto)"}
+                        <strong>
+                            Hora:
+                        </strong>
+                        ${escapeHtml(
+                            mensaje.mail_date ||
+                            ""
+                        )}
 
-                    <br><br>
+                        <div
+                            id="mensaje-${mensaje.mail_id}"
+                            class="contenido oculto"
+                        >
+                        </div>
 
-                    <strong>Fecha:</strong><br>
+                    </div>
 
-                    ${mensaje.createdAt || ""}
-
-                </div>
-
-            `;
-
-        });
-
-
-        document.getElementById("bandeja").innerHTML =
-            html;
+                `;
+            }
+        );
 
 
-        document.getElementById("estado").textContent =
+        document.getElementById(
+            "bandeja"
+        ).innerHTML = html;
+
+
+        document.getElementById(
+            "estado"
+        ).textContent =
             "✅ Bandeja actualizada.";
 
     }
-
 
     catch (error) {
 
         console.error(error);
 
-        document.getElementById("estado").innerHTML =
+        document.getElementById(
+            "estado"
+        ).innerHTML =
             '<div class="error">' +
-            "❌ ERROR\n\n" +
+            '❌ ERROR\n\n' +
             error.message +
-            "</div>";
+            '</div>';
+
     }
+
+}
+
+
+// ========================================
+// LEER MENSAJE
+// ========================================
+
+async function leerMensaje(id) {
+
+    const zona =
+        document.getElementById(
+            "mensaje-" + id
+        );
+
+
+    if (!zona) {
+        return;
+    }
+
+
+    // Si ya está abierto,
+    // simplemente lo cerramos.
+
+    if (!zona.classList.contains("oculto")) {
+
+        zona.classList.add("oculto");
+
+        return;
+    }
+
+
+    zona.classList.remove("oculto");
+
+    zona.innerHTML =
+        "⏳ Cargando mensaje...";
+
+
+    try {
+
+        const respuesta =
+            await fetch(
+                API +
+                "/mensaje?sid_token=" +
+                encodeURIComponent(sidToken) +
+                "&id=" +
+                encodeURIComponent(id)
+            );
+
+
+        if (!respuesta.ok) {
+
+            throw new Error(
+                "HTTP " +
+                respuesta.status
+            );
+        }
+
+
+        const datos =
+            await respuesta.json();
+
+
+        const cuerpo =
+            datos.mail_body ||
+            datos.mail_excerpt ||
+            "(mensaje vacío)";
+
+
+        zona.innerHTML =
+            "<strong>Contenido:</strong><br><br>" +
+            escapeHtml(cuerpo);
+
+
+    }
+
+    catch (error) {
+
+        zona.innerHTML =
+            '<span class="error">' +
+            '❌ No se pudo leer el mensaje.<br><br>' +
+            escapeHtml(error.message) +
+            '</span>';
+
+    }
+
+}
+
+
+// ========================================
+// SEGURIDAD
+// Evita interpretar HTML recibido
+// dentro del correo.
+// ========================================
+
+function escapeHtml(texto) {
+
+    return String(texto)
+
+        .replace(/&/g, "&amp;")
+
+        .replace(/</g, "&lt;")
+
+        .replace(/>/g, "&gt;")
+
+        .replace(/"/g, "&quot;")
+
+        .replace(/'/g, "&#039;");
+
 }
 
 </script>
 
 </body>
 </html>
-```
