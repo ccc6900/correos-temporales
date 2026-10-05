@@ -43,6 +43,11 @@
             background: #125ca3;
         }
 
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
         .correo {
             background: #eeeeee;
             padding: 15px;
@@ -61,6 +66,7 @@
         .error {
             color: #b00020;
             margin-top: 15px;
+            white-space: pre-wrap;
         }
 
         .estado {
@@ -76,7 +82,7 @@
 
     <h1>📧 Mis correos temporales</h1>
 
-    <button onclick="crearCorreo()">
+    <button id="btnCrear" onclick="crearCorreo()">
         CREAR NUEVO CORREO
     </button>
 
@@ -96,6 +102,7 @@
 
 </div>
 
+
 <script>
 
 const API = "https://api.mail.tm";
@@ -104,31 +111,442 @@ let token = null;
 let direccionActual = null;
 
 
-/* -------------------------------------------------
+/* =========================================
    CREAR CORREO
-------------------------------------------------- */
+========================================= */
 
 async function crearCorreo() {
 
+    const boton = document.getElementById("btnCrear");
+
+    boton.disabled = true;
+
     document.getElementById("estado").textContent =
-        "Creando correo...";
+        "⏳ Creando correo...";
 
     try {
 
-        // Obtener dominios disponibles
-        const respuestaDominios =
-            await fetch(API + "/domains?page=1");
+        /*
+         * 1. OBTENER DOMINIO
+         */
+
+        const respuestaDominios = await fetch(
+            API + "/domains?page=1",
+            {
+                headers: {
+                    "Accept": "application/json"
+                }
+            }
+        );
+
+        if (!respuestaDominios.ok) {
+
+            throw new Error(
+                "Mail.tm respondió con HTTP " +
+                respuestaDominios.status
+            );
+        }
+
 
         const datosDominios =
             await respuestaDominios.json();
 
-        if (!datosDominios["hydra:member"] ||
-            datosDominios["hydra:member"].length === 0) {
 
-            throw new Error("No hay dominios disponibles.");
+        const listaDominios =
+            datosDominios["hydra:member"];
+
+
+        if (!listaDominios ||
+            listaDominios.length === 0) {
+
+            throw new Error(
+                "Mail.tm no ha devuelto ningún dominio."
+            );
         }
 
-        const dominio =
-            datosDominios["hydra:member"][0].domain;
 
+        const dominio =
+            listaDominios[0].domain;
+
+
+        /*
+         * 2. CREAR USUARIO ALEATORIO
+         */
+
+        const usuario =
+            generarUsuarioAleatorio();
+
+        const password =
+            generarPasswordAleatoria();
+
+        const direccion =
+            usuario + "@" + dominio;
+
+
+        /*
+         * 3. CREAR CUENTA
+         */
+
+        document.getElementById("estado").textContent =
+            "⏳ Creando la cuenta " + direccion + "...";
+
+
+        const respuestaCuenta =
+            await fetch(
+                API + "/accounts",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        address: direccion,
+                        password: password
+                    })
+                }
+            );
+
+
+        if (!respuestaCuenta.ok) {
+
+            const textoError =
+                await respuestaCuenta.text();
+
+            throw new Error(
+                "No se pudo crear la cuenta.\n\n" +
+                "HTTP: " +
+                respuestaCuenta.status +
+                "\n\n" +
+                textoError
+            );
+        }
+
+
+        /*
+         * 4. OBTENER TOKEN
+         */
+
+        document.getElementById("estado").textContent =
+            "⏳ Obteniendo acceso a la bandeja...";
+
+
+        const respuestaToken =
+            await fetch(
+                API + "/token",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        address: direccion,
+                        password: password
+                    })
+                }
+            );
+
+
+        if (!respuestaToken.ok) {
+
+            const textoError =
+                await respuestaToken.text();
+
+            throw new Error(
+                "No se pudo obtener el token.\n\n" +
+                "HTTP: " +
+                respuestaToken.status +
+                "\n\n" +
+                textoError
+            );
+        }
+
+
+        const datosToken =
+            await respuestaToken.json();
+
+
+        token = datosToken.token;
+
+        direccionActual = direccion;
+
+
+        /*
+         * 5. MOSTRAR CORREO
+         */
+
+        document.getElementById("datosCorreo").innerHTML = `
+
+            <div class="correo">
+
+                <strong>Tu nuevo correo:</strong>
+
+                <br><br>
+
+                <span id="direccion">
+                    ${direccion}
+                </span>
+
+                <br><br>
+
+                <strong>Contraseña:</strong>
+
+                <br><br>
+
+                ${password}
+
+                <br><br>
+
+                <button onclick="copiarCorreo()">
+                    📋 COPIAR CORREO
+                </button>
+
+            </div>
+
+        `;
+
+
+        document.getElementById("estado").textContent =
+            "✅ Correo creado correctamente.";
+
+
+        document.getElementById("bandeja").innerHTML =
+            "📭 No hay mensajes todavía.";
+
+    }
+
+
+    catch (error) {
+
+        console.error(error);
+
+        document.getElementById("estado").innerHTML =
+            '<div class="error">' +
+            "❌ ERROR\n\n" +
+            error.message +
+            "</div>";
+    }
+
+
+    finally {
+
+        boton.disabled = false;
+
+    }
+}
+
+
+/* =========================================
+   USUARIO ALEATORIO
+========================================= */
+
+function generarUsuarioAleatorio() {
+
+    const caracteres =
+        "abcdefghijklmnopqrstuvwxyz" +
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+        "0123456789";
+
+
+    let resultado = "";
+
+
+    for (let i = 0; i < 14; i++) {
+
+        resultado +=
+            caracteres.charAt(
+                Math.floor(
+                    Math.random() *
+                    caracteres.length
+                )
+            );
+
+    }
+
+
+    return resultado;
+}
+
+
+/* =========================================
+   CONTRASEÑA ALEATORIA
+========================================= */
+
+function generarPasswordAleatoria() {
+
+    const caracteres =
+        "abcdefghijklmnopqrstuvwxyz" +
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+        "0123456789" +
+        "!@#$%";
+
+
+    let resultado = "";
+
+
+    for (let i = 0; i < 18; i++) {
+
+        resultado +=
+            caracteres.charAt(
+                Math.floor(
+                    Math.random() *
+                    caracteres.length
+                )
+            );
+
+    }
+
+
+    return resultado;
+}
+
+
+/* =========================================
+   COPIAR CORREO
+========================================= */
+
+function copiarCorreo() {
+
+    if (!direccionActual)
+        return;
+
+
+    navigator.clipboard.writeText(
+        direccionActual
+    );
+
+
+    document.getElementById("estado").textContent =
+        "📋 Correo copiado al portapapeles.";
+}
+
+
+/* =========================================
+   ACTUALIZAR BANDEJA
+========================================= */
+
+async function actualizarMensajes() {
+
+    if (!token) {
+
+        document.getElementById("estado").textContent =
+            "Primero crea un correo.";
+
+        return;
+    }
+
+
+    try {
+
+        document.getElementById("estado").textContent =
+            "⏳ Consultando bandeja...";
+
+
+        const respuesta =
+            await fetch(
+                API + "/messages",
+                {
+                    headers: {
+                        "Authorization":
+                            "Bearer " + token,
+
+                        "Accept":
+                            "application/json"
+                    }
+                }
+            );
+
+
+        if (!respuesta.ok) {
+
+            throw new Error(
+                "Mail.tm respondió HTTP " +
+                respuesta.status
+            );
+        }
+
+
+        const datos =
+            await respuesta.json();
+
+
+        const mensajes =
+            datos["hydra:member"] || [];
+
+
+        if (mensajes.length === 0) {
+
+            document.getElementById("bandeja").innerHTML =
+                "📭 No hay mensajes todavía.";
+
+            document.getElementById("estado").textContent =
+                "Bandeja actualizada.";
+
+            return;
+        }
+
+
+        let html = "";
+
+
+        mensajes.forEach(function(mensaje) {
+
+            html += `
+
+                <div class="mensaje">
+
+                    <strong>De:</strong><br>
+
+                    ${mensaje.from?.address || "Desconocido"}
+
+                    <br><br>
+
+                    <strong>Asunto:</strong><br>
+
+                    ${mensaje.subject || "(sin asunto)"}
+
+                    <br><br>
+
+                    <strong>Fecha:</strong><br>
+
+                    ${mensaje.createdAt || ""}
+
+                </div>
+
+            `;
+
+        });
+
+
+        document.getElementById("bandeja").innerHTML =
+            html;
+
+
+        document.getElementById("estado").textContent =
+            "✅ Bandeja actualizada.";
+
+    }
+
+
+    catch (error) {
+
+        console.error(error);
+
+        document.getElementById("estado").innerHTML =
+            '<div class="error">' +
+            "❌ ERROR\n\n" +
+            error.message +
+            "</div>";
+    }
+}
+
+</script>
+
+</body>
+</html>
 ```
