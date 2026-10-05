@@ -153,7 +153,9 @@ async function crearCorreo() {
 
 
         const listaDominios =
-            datosDominios["hydra:member"];
+    Array.isArray(datosDominios)
+        ? datosDominios
+        : datosDominios["hydra:member"];
 
 
         if (!listaDominios ||
