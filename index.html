@@ -1,0 +1,134 @@
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Mis correos temporales</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f2f2f2;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .contenedor {
+            max-width: 700px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #125ca3;
+        }
+
+        .correo {
+            background: #eeeeee;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            word-break: break-all;
+        }
+
+        .mensaje {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
+
+        .error {
+            color: #b00020;
+            margin-top: 15px;
+        }
+
+        .estado {
+            margin-top: 15px;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="contenedor">
+
+    <h1>📧 Mis correos temporales</h1>
+
+    <button onclick="crearCorreo()">
+        CREAR NUEVO CORREO
+    </button>
+
+    <button onclick="actualizarMensajes()">
+        ACTUALIZAR BANDEJA
+    </button>
+
+    <div id="estado" class="estado"></div>
+
+    <div id="datosCorreo"></div>
+
+    <h2>📥 Bandeja de entrada</h2>
+
+    <div id="bandeja">
+        Todavía no hay ningún correo.
+    </div>
+
+</div>
+
+<script>
+
+const API = "https://api.mail.tm";
+
+let token = null;
+let direccionActual = null;
+
+
+/* -------------------------------------------------
+   CREAR CORREO
+------------------------------------------------- */
+
+async function crearCorreo() {
+
+    document.getElementById("estado").textContent =
+        "Creando correo...";
+
+    try {
+
+        // Obtener dominios disponibles
+        const respuestaDominios =
+            await fetch(API + "/domains?page=1");
+
+        const datosDominios =
+            await respuestaDominios.json();
+
+        if (!datosDominios["hydra:member"] ||
+            datosDominios["hydra:member"].length === 0) {
+
+            throw new Error("No hay dominios disponibles.");
+        }
+
+        const dominio =
+            datosDominios["hydra:member"][0].domain;
+
+```
