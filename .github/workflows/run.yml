@@ -1,0 +1,30 @@
+name: Obtener M3U Cloud
+
+on:
+  workflow_dispatch: # Permite ejecutar el proceso manualmente desde el botón de GitHub
+
+jobs:
+  run-automation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install firefox
+
+      - name: Ejecutar script de automatización
+        env:
+          SIMPLELOGIN_API_KEY: ${{ secrets.SIMPLELOGIN_API_KEY }}
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          PROTON_STATE: ${{ secrets.PROTON_STATE }}
+        run: |
+          python script.py
