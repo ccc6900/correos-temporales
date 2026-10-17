@@ -3,7 +3,7 @@ import json
 import requests
 from playwright.sync_api import sync_playwright
 
-# Obtenemos los datos de forma segura desde las variables de entorno de GitHub
+# Obtenemos los datos desde las variables de entorno de GitHub
 SIMPLELOGIN_API_KEY = os.environ.get("SIMPLELOGIN_API_KEY")
 TARGET_URL = os.environ.get("TARGET_URL")
 PROTON_STATE_RAW = os.environ.get("PROTON_STATE")
@@ -58,7 +58,7 @@ def main():
             page.goto(TARGET_URL)
             page.wait_for_timeout(3000)
 
-            # 2. Localizar el campo de correo, borrar el Guerrillamail por defecto y poner el alias
+            # 2. Localizar el campo de correo, borrar el texto existente y escribir el alias
             email_input = page.locator("input[type='email'], input[type='text']").first
             email_input.click()
             email_input.press("Control+A")
@@ -66,9 +66,8 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Hacer clic en el botón de la web
-            # Si el botón tiene el texto "CREAR NUEVO CORREO" o similar:
-            button = page.locator("button:has-text('CREAR NUEVO CORREO'), button:has-text('Obtener'), input[type='submit']").first
+            # 3. Hacer clic en el botón "CREAR NUEVO CORREO" (soporta button, a, div, span)
+            button = page.locator("text='CREAR NUEVO CORREO', text='Crear nuevo correo', button:has-text('CREAR NUEVO CORREO')").first
             button.click()
             print("[*] Solicitud enviada. Esperando correo en ProtonMail...")
 
