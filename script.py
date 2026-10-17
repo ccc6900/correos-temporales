@@ -56,9 +56,9 @@ def main():
             # 1. Entrar a la web
             print(f"[*] Entrando en la web: {TARGET_URL}")
             page.goto(TARGET_URL)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(4000)
 
-            # 2. Localizar el campo de correo, borrar lo que haya y escribir el alias
+            # 2. Localizar el campo de correo, borrar el texto por defecto y escribir el alias
             email_input = page.locator("input[type='email'], input[type='text']").first
             email_input.click()
             email_input.press("Control+A")
@@ -66,9 +66,17 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. En lugar de buscar el botón a ciegas, pulsamos 'Enter' para enviar el formulario
-            email_input.press("Enter")
-            print("[*] Formulario enviado con Enter. Esperando correo en ProtonMail...")
+            # 3. Forzar el clic en el botón "CREAR NUEVO CORREO" usando JavaScript puro
+            page.evaluate("""() => {
+                const elements = Array.from(document.querySelectorAll('button, a, div, span'));
+                const target = elements.find(el => el.textContent.trim().toUpperCase().includes('CREAR NUEVO CORREO'));
+                if (target) {
+                    target.click();
+                } else {
+                    throw new Error('No se encontró el botón de crear correo');
+                }
+            }""")
+            print("[*] Clic ejecutado por JavaScript. Esperando correo en ProtonMail...")
 
             # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
