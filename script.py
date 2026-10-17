@@ -66,19 +66,16 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Clic directo al primer botón o elemento interactivo de la página (el botón azul principal)
+            # 3. Clic directo por JavaScript al botón azul de "Crear nuevo correo" basado en su selector de etiqueta
             page.evaluate("""() => {
-                // Busca cualquier botón, enlace o elemento clicable principal
-                const clickable = document.querySelector('button, a.btn, .btn, input[type="button"], input[type="submit"]');
-                if (clickable) {
-                    clickable.click();
+                const buttons = document.querySelectorAll('button');
+                if (buttons.length > 0) {
+                    buttons[0].click(); // Hace clic en el primer botón de la página (el botón azul)
                 } else {
-                    // Si no encuentra clase estándar, hace clic en el primer elemento interactivo disponible
-                    const allClickables = document.querySelectorAll('button, a, div, span');
-                    allClickables[0].click();
+                    throw new Error('No se encontró el botón');
                 }
             }""")
-            print("[*] Clic forzado ejecutado. Esperando correo en ProtonMail...")
+            print("[*] Clic ejecutado en el botón principal. Esperando correo en ProtonMail...")
 
             # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
