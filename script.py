@@ -66,20 +66,19 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Búsqueda flexible por JavaScript con múltiples palabras clave
+            # 3. Clic directo al primer botón o elemento interactivo de la página (el botón azul principal)
             page.evaluate("""() => {
-                const elements = Array.from(document.querySelectorAll('button, a, div, span, input'));
-                const target = elements.find(el => {
-                    const text = el.textContent.trim().toUpperCase();
-                    return text.includes('CREAR') || text.includes('CORREO') || text.includes('NUEVO');
-                });
-                if (target) {
-                    target.click();
+                // Busca cualquier botón, enlace o elemento clicable principal
+                const clickable = document.querySelector('button, a.btn, .btn, input[type="button"], input[type="submit"]');
+                if (clickable) {
+                    clickable.click();
                 } else {
-                    throw new Error('No se encontró ningún botón con CREAR/CORREO');
+                    // Si no encuentra clase estándar, hace clic en el primer elemento interactivo disponible
+                    const allClickables = document.querySelectorAll('button, a, div, span');
+                    allClickables[0].click();
                 }
             }""")
-            print("[*] Clic ejecutado con éxito. Esperando correo en ProtonMail...")
+            print("[*] Clic forzado ejecutado. Esperando correo en ProtonMail...")
 
             # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
