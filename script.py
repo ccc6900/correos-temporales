@@ -66,17 +66,20 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Forzar el clic en el botón "CREAR NUEVO CORREO" usando JavaScript puro
+            # 3. Búsqueda flexible por JavaScript con múltiples palabras clave
             page.evaluate("""() => {
-                const elements = Array.from(document.querySelectorAll('button, a, div, span'));
-                const target = elements.find(el => el.textContent.trim().toUpperCase().includes('CREAR NUEVO CORREO'));
+                const elements = Array.from(document.querySelectorAll('button, a, div, span, input'));
+                const target = elements.find(el => {
+                    const text = el.textContent.trim().toUpperCase();
+                    return text.includes('CREAR') || text.includes('CORREO') || text.includes('NUEVO');
+                });
                 if (target) {
                     target.click();
                 } else {
-                    throw new Error('No se encontró el botón de crear correo');
+                    throw new Error('No se encontró ningún botón con CREAR/CORREO');
                 }
             }""")
-            print("[*] Clic ejecutado por JavaScript. Esperando correo en ProtonMail...")
+            print("[*] Clic ejecutado con éxito. Esperando correo en ProtonMail...")
 
             # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
