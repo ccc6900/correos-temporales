@@ -62,7 +62,7 @@ def main():
             page.fill("input[type='email']", alias)
             
             # ---> CAMBIA 'Obtener prueba' POR EL TEXTO EXACTO DEL BOTÓN DE TU WEB <---
-            page.click("button:has-text('OPTÉN PRUEBA GRATUITA')")
+            page.click("button:has-text('OBTÉN PRUEBA GRATUITA')")
             print("[*] Correo enviado. Esperando correo en Proton...")
 
             # 2. Ir a ProtonMail a leer el correo
