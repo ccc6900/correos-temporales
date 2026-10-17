@@ -15,7 +15,6 @@ def crear_alias_simplelogin():
     }
     response = requests.post(url, headers=headers)
     
-    # Imprimimos detalles en los logs para ver exactamente qué responde SimpleLogin
     print(f"Status Code: {response.status_code}")
     print(f"Response: {response.text}")
     
@@ -59,9 +58,11 @@ def main():
             print(f"[*] Entrando en la web: {TARGET_URL}")
             page.goto(TARGET_URL)
             
-            # --- AJUSTA ESTOS SELECTORES SEGÚN TU WEB ---
+            # Rellena el campo de correo (ajusta el selector si tu input de email es diferente, ej: input[name='email'])
             page.fill("input[type='email']", alias)
-            page.click("button:has-text('Obtener prueba')")
+            
+            # ---> CAMBIA 'Obtener prueba' POR EL TEXTO EXACTO DEL BOTÓN DE TU WEB <---
+            page.click("button:has-text('OPTÉN PRUEBA GRATUITA')")
             print("[*] Correo enviado. Esperando correo en Proton...")
 
             # 2. Ir a ProtonMail a leer el correo
@@ -79,7 +80,7 @@ def main():
 
             browser.close()
     finally:
-        # 3. Limpieza automática
+        # 3. Limpieza automática (borra el alias al terminar)
         borrar_alias_simplelogin(alias_id)
 
 if __name__ == "__main__":
