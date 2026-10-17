@@ -15,8 +15,11 @@ def crear_alias_simplelogin():
         "Authentication": f"{SIMPLELOGIN_API_KEY}"
     }
     
-    # Intentamos crear el alias con un reintento si da rate limit
-    for intento in range(3):
+    # Hacemos una pausa preventiva de 5 segundos antes de la primera llamada
+    print("[*] Esperando 5 segundos antes de contactar con SimpleLogin...")
+    time.sleep(5)
+
+    for intento in range(1, 4):
         response = requests.post(url, headers=headers)
         print(f"Status Code: {response.status_code}")
         print(f"Response: {response.text}")
@@ -26,8 +29,8 @@ def crear_alias_simplelogin():
             print(f"[+] Alias creado: {data['alias']}")
             return data['alias'], data.get('id')
         elif response.status_code == 429:
-            print(f"[-] Rate limit alcanzado. Esperando 10 segundos antes de reintentar (Intento {intento+1}/3)...")
-            time.sleep(10)
+            print(f"[-] Rate limit de SimpleLogin alcanzado. Esperando 60 segundos (Intento {intento}/3)...")
+            time.sleep(60)
         else:
             raise Exception(f"Error creando alias: {response.text}")
             
@@ -44,8 +47,6 @@ def borrar_alias_simplelogin(alias_id):
     print("[+] Alias eliminado correctamente de SimpleLogin.")
 
 def main():
-    # Pequeña pausa inicial para evitar saturar el API
-    time.sleep(2)
     alias, alias_id = crear_alias_simplelogin()
     
     # Cargar el estado de sesión de Proton
@@ -76,7 +77,7 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Clic directo por JavaScript al botón azul de "Crear nuevo correo"
+            # 3. Clic directo por JavaScript al botón principal
             page.evaluate("""() => {
                 const buttons = document.querySelectorAll('button');
                 if (buttons.length > 0) {
