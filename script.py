@@ -3,7 +3,7 @@ import json
 import requests
 from playwright.sync_api import sync_playwright
 
-# Obtenemos los datos de forma segura desde las variables de entorno de GitHub (o entorno local)
+# Obtenemos los datos de forma segura desde las variables de entorno de GitHub
 SIMPLELOGIN_API_KEY = os.environ.get("SIMPLELOGIN_API_KEY")
 TARGET_URL = os.environ.get("TARGET_URL")
 PROTON_STATE_RAW = os.environ.get("PROTON_STATE")
@@ -38,7 +38,7 @@ def borrar_alias_simplelogin(alias_id):
 def main():
     alias, alias_id = crear_alias_simplelogin()
     
-    # Cargar el estado de sesión de Proton desde la variable de entorno de GitHub o archivo local
+    # Cargar el estado de sesión de Proton
     if PROTON_STATE_RAW:
         storage_state = json.loads(PROTON_STATE_RAW)
     elif os.path.exists("state.json"):
@@ -49,25 +49,32 @@ def main():
 
     try:
         with sync_playwright() as p:
-            # En la nube usamos headless=True porque no hay pantalla física
             browser = p.firefox.launch(headless=True)
             context = browser.new_context(storage_state=storage_state)
             page = context.new_page()
 
-            # 1. Entrar a la web y registrar el alias
+            # 1. Entrar a la web
             print(f"[*] Entrando en la web: {TARGET_URL}")
             page.goto(TARGET_URL)
-            
-            # Rellena el campo de correo (ajusta el selector si tu input de email es diferente, ej: input[name='email'])
-            page.fill("input[type='email']", alias)
-            
-            # ---> CAMBIA 'Obtener prueba' POR EL TEXTO EXACTO DEL BOTÓN DE TU WEB <---
-            page.click("button:has-text('OBTÉN PRUEBA GRATUITA')")
-            print("[*] Correo enviado. Esperando correo en Proton...")
+            page.wait_for_timeout(3000)
 
-            # 2. Ir a ProtonMail a leer el correo
+            # 2. Localizar el campo de correo, borrar el Guerrillamail por defecto y poner el alias
+            email_input = page.locator("input[type='email'], input[type='text']").first
+            email_input.click()
+            email_input.press("Control+A")
+            email_input.press("Backspace")
+            email_input.fill(alias)
+            print(f"[*] Correo cambiado con éxito a: {alias}")
+
+            # 3. Hacer clic en el botón de la web
+            # Si el botón tiene el texto "CREAR NUEVO CORREO" o similar:
+            button = page.locator("button:has-text('CREAR NUEVO CORREO'), button:has-text('Obtener'), input[type='submit']").first
+            button.click()
+            print("[*] Solicitud enviada. Esperando correo en ProtonMail...")
+
+            # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
-            page.wait_for_timeout(10000)
+            page.wait_for_timeout(12000)
 
             correo = page.get_by_text(alias, exact=False)
             if correo.count() > 0:
@@ -76,11 +83,11 @@ def main():
                 cuerpo = page.locator(".message-content").inner_text()
                 print(f"\n--- CONTENIDO DEL CORREO ---\n{cuerpo}\n----------------------------\n")
             else:
-                print("[-] No se encontró el correo todavía.")
+                print("[-] No se encontró el correo todavía en la bandeja de entrada.")
 
             browser.close()
     finally:
-        # 3. Limpieza automática (borra el alias al terminar)
+        # 5. Limpieza del alias en SimpleLogin
         borrar_alias_simplelogin(alias_id)
 
 if __name__ == "__main__":
