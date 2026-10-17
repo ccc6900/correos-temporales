@@ -66,8 +66,8 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Hacer clic en el botón "CREAR NUEVO CORREO" (soporta button, a, div, span)
-            button = page.locator("text='CREAR NUEVO CORREO', text='Crear nuevo correo', button:has-text('CREAR NUEVO CORREO')").first
+            # 3. Hacer clic en el botón usando búsqueda insensible a mayúsculas/minúsculas
+            button = page.get_by_text("crear nuevo correo", exact=False).first
             button.click()
             print("[*] Solicitud enviada. Esperando correo en ProtonMail...")
 
