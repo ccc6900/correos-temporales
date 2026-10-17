@@ -58,7 +58,7 @@ def main():
             page.goto(TARGET_URL)
             page.wait_for_timeout(3000)
 
-            # 2. Localizar el campo de correo, borrar el texto existente y escribir el alias
+            # 2. Localizar el campo de correo, borrar lo que haya y escribir el alias
             email_input = page.locator("input[type='email'], input[type='text']").first
             email_input.click()
             email_input.press("Control+A")
@@ -66,10 +66,9 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Hacer clic en el botón usando búsqueda insensible a mayúsculas/minúsculas
-            button = page.get_by_text("crear nuevo correo", exact=False).first
-            button.click()
-            print("[*] Solicitud enviada. Esperando correo en ProtonMail...")
+            # 3. En lugar de buscar el botón a ciegas, pulsamos 'Enter' para enviar el formulario
+            email_input.press("Enter")
+            print("[*] Formulario enviado con Enter. Esperando correo en ProtonMail...")
 
             # 4. Ir a ProtonMail a leer el correo recibido
             page.goto("https://mail.proton.me/u/1/inbox")
