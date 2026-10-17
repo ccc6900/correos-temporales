@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import requests
 from playwright.sync_api import sync_playwright
 
@@ -13,17 +14,24 @@ def crear_alias_simplelogin():
     headers = {
         "Authentication": f"{SIMPLELOGIN_API_KEY}"
     }
-    response = requests.post(url, headers=headers)
     
-    print(f"Status Code: {response.status_code}")
-    print(f"Response: {response.text}")
-    
-    if response.status_code == 201:
-        data = response.json()
-        print(f"[+] Alias creado: {data['alias']}")
-        return data['alias'], data.get('id')
-    else:
-        raise Exception(f"Error creando alias: {response.text}")
+    # Intentamos crear el alias con un reintento si da rate limit
+    for intento in range(3):
+        response = requests.post(url, headers=headers)
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        
+        if response.status_code == 201:
+            data = response.json()
+            print(f"[+] Alias creado: {data['alias']}")
+            return data['alias'], data.get('id')
+        elif response.status_code == 429:
+            print(f"[-] Rate limit alcanzado. Esperando 10 segundos antes de reintentar (Intento {intento+1}/3)...")
+            time.sleep(10)
+        else:
+            raise Exception(f"Error creando alias: {response.text}")
+            
+    raise Exception("[-] Demasiadas peticiones a SimpleLogin. Rate limit persistente.")
 
 def borrar_alias_simplelogin(alias_id):
     if not alias_id:
@@ -36,6 +44,8 @@ def borrar_alias_simplelogin(alias_id):
     print("[+] Alias eliminado correctamente de SimpleLogin.")
 
 def main():
+    # Pequeña pausa inicial para evitar saturar el API
+    time.sleep(2)
     alias, alias_id = crear_alias_simplelogin()
     
     # Cargar el estado de sesión de Proton
@@ -66,11 +76,11 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Clic directo por JavaScript al botón azul de "Crear nuevo correo" basado en su selector de etiqueta
+            # 3. Clic directo por JavaScript al botón azul de "Crear nuevo correo"
             page.evaluate("""() => {
                 const buttons = document.querySelectorAll('button');
                 if (buttons.length > 0) {
-                    buttons[0].click(); // Hace clic en el primer botón de la página (el botón azul)
+                    buttons[0].click();
                 } else {
                     throw new Error('No se encontró el botón');
                 }
