@@ -15,7 +15,6 @@ def crear_alias_simplelogin():
         "Authentication": f"{SIMPLELOGIN_API_KEY}"
     }
     
-    # Hacemos una pausa preventiva de 5 segundos antes de la primera llamada
     print("[*] Esperando 5 segundos antes de contactar con SimpleLogin...")
     time.sleep(5)
 
@@ -88,18 +87,35 @@ def main():
             }""")
             print("[*] Clic ejecutado en el botón principal. Esperando correo en ProtonMail...")
 
-            # 4. Ir a ProtonMail a leer el correo recibido
+            # 4. Ir a ProtonMail y buscar el correo con reintentos (hasta 30 segundos)
             page.goto("https://mail.proton.me/u/1/inbox")
-            page.wait_for_timeout(12000)
-
-            correo = page.get_by_text(alias, exact=False)
-            if correo.count() > 0:
-                correo.first.click()
+            
+            correo_encontrado = False
+            for intento_correo in range(6):  # 6 intentos x 5 segundos = 30 segundos máximos de espera
+                print(f"[*] Buscando correo en ProtonMail (Intento {intento_correo+1}/6)...")
+                page.wait_for_timeout(5000)
+                
+                # Recargamos la bandeja o refrescamos la vista si es necesario
+                page.reload()
                 page.wait_for_timeout(3000)
-                cuerpo = page.locator(".message-content").inner_text()
-                print(f"\n--- CONTENIDO DEL CORREO ---\n{cuerpo}\n----------------------------\n")
-            else:
-                print("[-] No se encontró el correo todavía en la bandeja de entrada.")
+
+                correo = page.get_by_text(alias, exact=False)
+                if correo.count() > 0:
+                    correo.first.click()
+                    page.wait_for_timeout(3000)
+                    
+                    # Intentamos extraer el contenido del mensaje
+                    try:
+                        cuerpo = page.locator(".message-content").inner_text()
+                    except:
+                        cuerpo = page.inner_text("body") # Alternativa si cambia la clase
+                        
+                    print(f"\n--- CONTENIDO DEL CORREO ---\n{cuerpo}\n----------------------------\n")
+                    correo_encontrado = True
+                    break
+
+            if not correo_encontrado:
+                print("[-] No se encontró el correo en el tiempo límite.")
 
             browser.close()
     finally:
