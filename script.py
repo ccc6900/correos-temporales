@@ -87,7 +87,7 @@ def main():
             }""")
             print("[*] Clic ejecutado en el botón principal. Esperando correo en ProtonMail...")
 
-            # 4. Ir a ProtonMail y esperar al primer correo nuevo (hasta 45 segundos)
+            # 4. Ir a ProtonMail y buscar el correo mediante un buscador por JavaScript
             page.goto("https://mail.proton.me/u/1/inbox")
             page.wait_for_timeout(6000) # Espera inicial a que cargue la bandeja
             
@@ -95,19 +95,33 @@ def main():
             for intento_correo in range(1, 10):  # 9 intentos de 5 segundos
                 print(f"[*] Comprobando bandeja de ProtonMail (Intento {intento_correo}/9)...")
                 
-                # Selector combinado y robusto para la bandeja de ProtonMail
-                items_correo = page.locator("[data-shortcut-target='item'], .item-container, div[role='row'], .item-row")
+                # Ejecutamos un script en la página para encontrar y hacer clic en el primer mensaje de la lista
+                clicked = page.evaluate("""() => {
+                    // Buscamos posibles filas o elementos interactivos de la lista de correos en Proton
+                    const selectors = ['.item-container', '[data-shortcut-target="item"]', '[role="row"]', '.item-row', 'div[tabindex="0"]'];
+                    for (let sel of selectors) {
+                        const items = document.querySelectorAll(sel);
+                        if (items.length > 0) {
+                            // Clic en el primer elemento de la lista (el más reciente)
+                            items[0].click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }""")
                 
-                if items_correo.count() > 0:
-                    print("[+] ¡Mensaje detectado en la bandeja! Abriendo el primero...")
-                    items_correo.first.click()
+                if clicked:
+                    print("[+] ¡Mensaje detectado y abierto con éxito!")
                     page.wait_for_timeout(4000)
                     
                     try:
                         cuerpo = page.locator(".message-content").inner_text()
                     except:
-                        cuerpo = page.inner_text("body")
-                        
+                        try:
+                            cuerpo = page.locator("article").inner_text()
+                        except:
+                            cuerpo = page.inner_text("body")
+                            
                     print(f"\n--- CONTENIDO DEL CORREO ---\n{cuerpo}\n----------------------------\n")
                     correo_encontrado = True
                     break
