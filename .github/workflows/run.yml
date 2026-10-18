@@ -28,9 +28,8 @@ jobs:
       # 4. Ejecutar el script pasando los secretos como variables de entorno
       - name: Ejecutar script.py
         env:
-          SIMPLELOGIN_API_KEY: ${{ secrets.SIMPLELOGIN_API_KEY }}
-          TARGET_URL: ${{ secrets.TARGET_URL }}
-          PROTON_USER: ${{ secrets.PROTON_USER }}
-          PROTON_PASS: ${{ secrets.PROTON_PASS }}
+  TARGET_URL: ${{ secrets.TARGET_URL }}
+  OUTLOOK_USER: ${{ secrets.OUTLOOK_USER }}
+  OUTLOOK_PASS: ${{ secrets.OUTLOOK_PASS }}
         run: |
           python script.py
