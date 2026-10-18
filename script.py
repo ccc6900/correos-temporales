@@ -79,37 +79,45 @@ def main():
             }""")
             print("[*] Clic ejecutado en el botón principal.")
 
-            # 2. Iniciar sesión automáticamente en ProtonMail
+            # 2. Iniciar sesión automáticamente en ProtonMail de forma robusta
             print("[*] Iniciando sesión en ProtonMail...")
             page.goto("https://account.proton.me/login")
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(4000)
 
+            # Rellenar usuario, contraseña y presionar Enter
+            page.locator("input[id='username'], input[name='username']").fill(PROTON_USER)
+            password_field = page.locator("input[id='password'], input[name='password']")
+            password_field.fill(PROTON_PASS)
+            
+            # Pulsamos Enter en el campo de contraseña para forzar el envío del formulario
+            password_field.press("Enter")
+            print("[*] Credenciales enviadas con Enter. Esperando acceso al buzón...")
+
+            # Esperamos a que la URL cambie al buzón de correo
             try:
-                page.locator("input[id='username'], input[name='username']").fill(PROTON_USER)
-                page.locator("input[id='password'], input[name='password']").fill(PROTON_PASS)
-                page.locator("button[type='submit']").click()
-                print("[*] Credenciales enviadas. Esperando acceso al buzón...")
-                
-                # Esperamos de forma inteligente hasta que la URL sea la de correo (máximo 25 segundos)
-                page.wait_for_url("**/mail**", timeout=25000)
-                print("[+] ¡Acceso al buzón de Proton confirmado!")
-            except Exception as e:
-                print(f"[-] Error durante el login o redirección: {e}")
-                # Forzamos navegación directa por si acaso
+                page.wait_for_url("**/mail**", timeout=30000)
+                print("[+] ¡Acceso al buzón de Proton confirmado por URL!")
+            except:
+                print("[-] No redirigió automáticamente por URL, forzando navegación al inbox...")
                 page.goto("https://mail.proton.me/u/1/inbox")
 
-            page.wait_for_timeout(5000)
+            page.wait_for_timeout(6000)
             
-            # 3. Buscar el correo de confirmación de manera robusta
+            # 3. Buscar el correo de confirmación asegurándonos de que ya no estamos en la página de login
             correo_encontrado = False
             for intento_correo in range(1, 10):
                 print(f"[*] Comprobando bandeja de ProtonMail (Intento {intento_correo}/9)...")
                 
+                # Verificación extra: si por algún motivo seguimos en el login, saltamos este intento
+                current_title = page.title().lower()
+                if "sign-in" in current_title or "login" in page.url.lower():
+                    print("[-] Seguimos en la pantalla de login, esperando redirección...")
+                    page.wait_for_timeout(5000)
+                    continue
+
                 clicked = page.evaluate("""() => {
-                    // Buscamos elementos que sean filas de correos reales dentro de la bandeja
                     const items = document.querySelectorAll('div[class*="item"], div[role="row"], .item-row');
                     for (let item of items) {
-                        // Verificamos que el elemento contenga texto útil y no pertenezca a la barra lateral o menús
                         if (item.innerText && item.innerText.length > 5 && item.clientHeight > 15) {
                             item.click();
                             return true;
