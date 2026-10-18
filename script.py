@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import requests
 from playwright.sync_api import sync_playwright
@@ -7,7 +6,8 @@ from playwright.sync_api import sync_playwright
 # Obtenemos los datos desde las variables de entorno de GitHub
 SIMPLELOGIN_API_KEY = os.environ.get("SIMPLELOGIN_API_KEY")
 TARGET_URL = os.environ.get("TARGET_URL")
-PROTON_STATE_RAW = os.environ.get("PROTON_STATE")
+PROTON_USER = os.environ.get("PROTON_USER")
+PROTON_PASS = os.environ.get("PROTON_PASS")
 
 def crear_alias_simplelogin():
     url = "https://app.simplelogin.io/api/alias/random/new"
@@ -46,29 +46,23 @@ def borrar_alias_simplelogin(alias_id):
     print("[+] Alias eliminado correctamente de SimpleLogin.")
 
 def main():
+    if not PROTON_USER or not PROTON_PASS:
+        raise Exception("[-] Faltan las credenciales PROTON_USER o PROTON_PASS en las variables de entorno.")
+
     alias, alias_id = crear_alias_simplelogin()
-    
-    # Cargar el estado de sesión de Proton
-    if PROTON_STATE_RAW:
-        storage_state = json.loads(PROTON_STATE_RAW)
-    elif os.path.exists("state.json"):
-        with open("state.json", "r") as f:
-            storage_state = json.load(f)
-    else:
-        raise Exception("[-] No se encuentra el estado de ProtonMail.")
 
     try:
         with sync_playwright() as p:
+            # Ejecutamos con headful/headless según prefieras (headless=True en GitHub Actions)
             browser = p.firefox.launch(headless=True)
-            context = browser.new_context(storage_state=storage_state)
+            context = browser.new_context()
             page = context.new_page()
 
-            # 1. Entrar a la web
+            # 1. Entrar a la web objetivo y registrar el alias
             print(f"[*] Entrando en la web: {TARGET_URL}")
             page.goto(TARGET_URL)
             page.wait_for_timeout(4000)
 
-            # 2. Localizar el campo de correo, borrar el texto por defecto y escribir el alias
             email_input = page.locator("input[type='email'], input[type='text']").first
             email_input.click()
             email_input.press("Control+A")
@@ -76,7 +70,6 @@ def main():
             email_input.fill(alias)
             print(f"[*] Correo cambiado con éxito a: {alias}")
 
-            # 3. Clic directo por JavaScript al botón principal
             page.evaluate("""() => {
                 const buttons = document.querySelectorAll('button');
                 if (buttons.length > 0) {
@@ -85,25 +78,39 @@ def main():
                     throw new Error('No se encontró el botón');
                 }
             }""")
-            print("[*] Clic ejecutado en el botón principal. Esperando correo en ProtonMail...")
+            print("[*] Clic ejecutado en el botón principal.")
 
-            # 4. Ir a ProtonMail y comprobar estado
-            page.goto("https://mail.proton.me/u/1/inbox")
-            page.wait_for_timeout(6000)
+            # 2. Iniciar sesión automáticamente en ProtonMail
+            print("[*] Iniciando sesión en ProtonMail...")
+            page.goto("https://account.proton.me/login")
+            page.wait_for_timeout(4000)
+
+            # Rellenar usuario y contraseña (manejando posibles iframes de Proton)
+            try:
+                # Proton a veces mete el login en un iframe o inputs directos
+                frame = page.frame_locator("iframe[title='Sign in']") if page.locator("iframe[title='Sign in']").count() > 0 else page
+                
+                frame.locator("input[id='username'], input[name='username']").fill(PROTON_USER)
+                frame.locator("input[id='password'], input[name='password']").fill(PROTON_PASS)
+                frame.locator("button[type='submit']").click()
+                print("[*] Credenciales enviadas. Esperando acceso a la bandeja...")
+            except Exception as e:
+                print(f"[-] Error en el autologin: {e}")
+
+            # 3. Ir a la bandeja de entrada y esperar el correo
+            page.wait_for_timeout(8000)
+            if "mail.proton.me" not in page.url:
+                page.goto("https://mail.proton.me/u/1/inbox")
             
-            print(f"[*] URL actual en navegador: {page.url}")
-            print(f"[*] Título de la página: {page.title()}")
+            page.wait_for_timeout(6000)
             
             correo_encontrado = False
             for intento_correo in range(1, 10):
                 print(f"[*] Comprobando bandeja de ProtonMail (Intento {intento_correo}/9)...")
                 
-                # Búsqueda ampliada mediante JS para detectar cualquier elemento interactivo en la lista
                 clicked = page.evaluate("""() => {
-                    // Buscamos filas, contenedores o elementos de lista genéricos en Proton
                     const items = document.querySelectorAll('div[class*="item"], div[role="row"], article, li');
                     for (let item of items) {
-                        // Filtramos elementos que parezcan filas de correo (que tengan un tamaño razonable y texto)
                         if (item.innerText && item.innerText.length > 5 && (item.clientHeight > 20 || item.getBoundingClientRect().height > 20)) {
                             item.click();
                             return true;
@@ -113,7 +120,7 @@ def main():
                 }""")
                 
                 if clicked:
-                    print("[+] ¡Elemento de correo detectado y abierto con éxito!")
+                    print("[+] ¡Mensaje detectado y abierto con éxito!")
                     page.wait_for_timeout(4000)
                     
                     try:
@@ -132,7 +139,7 @@ def main():
 
             browser.close()
     finally:
-        # 5. Limpieza del alias en SimpleLogin
+        # 4. Limpieza del alias en SimpleLogin
         borrar_alias_simplelogin(alias_id)
 
 if __name__ == "__main__":
