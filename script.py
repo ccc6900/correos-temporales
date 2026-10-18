@@ -95,11 +95,11 @@ def main():
             for intento_correo in range(1, 10):  # 9 intentos de 5 segundos
                 print(f"[*] Comprobando bandeja de ProtonMail (Intento {intento_correo}/9)...")
                 
-                # Selector universal basado en filas de elementos de ProtonMail
-                items_correo = page.locator("div[role='row']")
+                # Selector combinado y robusto para la bandeja de ProtonMail
+                items_correo = page.locator("[data-shortcut-target='item'], .item-container, div[role='row'], .item-row")
                 
                 if items_correo.count() > 0:
-                    print("[+] ¡Filas detectadas en la bandeja! Abriendo el primer correo...")
+                    print("[+] ¡Mensaje detectado en la bandeja! Abriendo el primero...")
                     items_correo.first.click()
                     page.wait_for_timeout(4000)
                     
