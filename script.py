@@ -87,23 +87,25 @@ def main():
             }""")
             print("[*] Clic ejecutado en el botón principal. Esperando correo en ProtonMail...")
 
-            # 4. Ir a ProtonMail y buscar el correo mediante un buscador por JavaScript
+            # 4. Ir a ProtonMail y comprobar estado
             page.goto("https://mail.proton.me/u/1/inbox")
-            page.wait_for_timeout(6000) # Espera inicial a que cargue la bandeja
+            page.wait_for_timeout(6000)
+            
+            print(f"[*] URL actual en navegador: {page.url}")
+            print(f"[*] Título de la página: {page.title()}")
             
             correo_encontrado = False
-            for intento_correo in range(1, 10):  # 9 intentos de 5 segundos
+            for intento_correo in range(1, 10):
                 print(f"[*] Comprobando bandeja de ProtonMail (Intento {intento_correo}/9)...")
                 
-                # Ejecutamos un script en la página para encontrar y hacer clic en el primer mensaje de la lista
+                # Búsqueda ampliada mediante JS para detectar cualquier elemento interactivo en la lista
                 clicked = page.evaluate("""() => {
-                    // Buscamos posibles filas o elementos interactivos de la lista de correos en Proton
-                    const selectors = ['.item-container', '[data-shortcut-target="item"]', '[role="row"]', '.item-row', 'div[tabindex="0"]'];
-                    for (let sel of selectors) {
-                        const items = document.querySelectorAll(sel);
-                        if (items.length > 0) {
-                            // Clic en el primer elemento de la lista (el más reciente)
-                            items[0].click();
+                    // Buscamos filas, contenedores o elementos de lista genéricos en Proton
+                    const items = document.querySelectorAll('div[class*="item"], div[role="row"], article, li');
+                    for (let item of items) {
+                        // Filtramos elementos que parezcan filas de correo (que tengan un tamaño razonable y texto)
+                        if (item.innerText && item.innerText.length > 5 && (item.clientHeight > 20 || item.getBoundingClientRect().height > 20)) {
+                            item.click();
                             return true;
                         }
                     }
@@ -111,17 +113,14 @@ def main():
                 }""")
                 
                 if clicked:
-                    print("[+] ¡Mensaje detectado y abierto con éxito!")
+                    print("[+] ¡Elemento de correo detectado y abierto con éxito!")
                     page.wait_for_timeout(4000)
                     
                     try:
                         cuerpo = page.locator(".message-content").inner_text()
                     except:
-                        try:
-                            cuerpo = page.locator("article").inner_text()
-                        except:
-                            cuerpo = page.inner_text("body")
-                            
+                        cuerpo = page.inner_text("body")
+                        
                     print(f"\n--- CONTENIDO DEL CORREO ---\n{cuerpo}\n----------------------------\n")
                     correo_encontrado = True
                     break
