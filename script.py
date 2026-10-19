@@ -84,8 +84,15 @@ def leer_correo_imap(user, password, timeout_segundos=60):
     return None
 
 def main():
-    if not SIMPLELOGIN_API_KEY or not GMX_USER or not GMX_PASS:
-        raise Exception("[-] Faltan secretos necesarios (SIMPLELOGIN_API_KEY, GMX_USER o GMX_PASS).")
+    # Diagnóstico detallado para identificar qué secreto falta en GitHub Actions
+    faltantes = []
+    if not TARGET_URL: faltantes.append("TARGET_URL")
+    if not SIMPLELOGIN_API_KEY: faltantes.append("SIMPLELOGIN_API_KEY")
+    if not GMX_USER: faltantes.append("GMX_USER")
+    if not GMX_PASS: faltantes.append("GMX_PASS")
+    
+    if faltantes:
+        raise Exception(f"[-] Faltan los siguientes secretos en GitHub Actions: {', '.join(faltantes)}. Revisa que estén bien escritos en Settings > Secrets.")
 
     alias_correo, alias_id = crear_alias_simplelogin_limpio()
 
