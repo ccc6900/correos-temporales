@@ -1,4 +1,4 @@
-name: Registro Automatizado GMX
+name: Registro Automatizado Completo
 
 on:
   workflow_dispatch:
@@ -19,13 +19,14 @@ jobs:
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install playwright
+          pip install playwright requests
           playwright install firefox
           playwright install-deps firefox
 
       - name: Ejecutar script.py
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
+          SIMPLELOGIN_API_KEY: ${{ secrets.SIMPLELOGIN_API_KEY }}
           GMX_USER: ${{ secrets.GMX_USER }}
           GMX_PASS: ${{ secrets.GMX_PASS }}
         run: |
