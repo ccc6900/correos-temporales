@@ -8,7 +8,6 @@ from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("TARGET_URL")
 SIMPLELOGIN_API_KEY = os.environ.get("SIMPLELOGIN_API_KEY")
-# Tu correo principal y contraseña (por ejemplo, donde recibes lo de SimpleLogin, o si lees por IMAP)
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
@@ -118,7 +117,7 @@ def main():
             }""")
             print("[*] Clic ejecutado en el botón de registro. Esperando correo...")
 
-            # 2. Leer el correo que SimpleLogin habrá reenviado a tu bandeja
+            # 2. Leer el correo que SimpleLogin habrá reenviado a tu bandeja GMX
             cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
 
             if cuerpo_correo:
@@ -133,7 +132,7 @@ def main():
                 # 3. Aplicar la verificación en la web
                 if codigo:
                     print(f"[*] Aplicando código de verificación: {codigo}")
-                    code_input = page.locator("input[type='text'], inputname*='code'], input[id*='code']").first
+                    code_input = page.locator("input[type='text'], input[name*='code'], input[id*='code']").first
                     code_input.fill(codigo)
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(5000)
@@ -152,7 +151,6 @@ def main():
 
             browser.close()
     finally:
-        # Borrar el alias de SimpleLogin al terminar para que no se acumulen
         borrar_alias_simplelogin(alias_id)
 
 if __name__ == "__main__":
