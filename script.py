@@ -1,53 +1,35 @@
 import os
 import time
-import requests
+import random
 import imaplib
 import email
 import re
 from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("TARGET_URL")
-SIMPLELOGIN_API_KEY = os.environ.get("SIMPLELOGIN_API_KEY")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-def crear_alias_simplelogin_limpio():
-    """Genera un alias limpio automático en SimpleLogin con reintentos si salta el error 429"""
-    url = "https://app.simplelogin.io/api/alias/random/new"
-    headers = {
-        "Authentication": f"{SIMPLELOGIN_API_KEY}"
-    }
+def generar_correo_limpio_con_puntos(email_base):
+    """
+    Genera una variante única y limpia con puntos aleatorios (ej: a.lfredito25@gmx.es).
+    No usa el signo '+' y es 100% aceptada por cualquier página web.
+    """
+    usuario, dominio = email_base.split("@")
+    letras = list(usuario)
+    nueva_cadena = [letras[0]]
     
-    print("[*] Generando alias limpio automático en SimpleLogin...")
-    for intento in range(1, 6):
-        response = requests.post(url, headers=headers)
-        if response.status_code == 201:
-            data = response.json()
-            print(f"[+] Alias limpio creado con éxito: {data['alias']}")
-            return data['alias'], data.get('id')
-        elif response.status_code == 429:
-            espera = intento * 20
-            print(f"[-] Límite de peticiones alcanzado (429). Esperando {espera} segundos para reintentar...")
-            time.sleep(espera)
-        else:
-            print(f"[-] Error en SimpleLogin (Código {response.status_code}): {response.text}")
-            time.sleep(5)
-            
-    raise Exception("[-] No se pudo generar el alias en SimpleLogin tras varios intentos.")
+    for letra in letras[1:]:
+        if random.choice([True, False]):
+            nueva_cadena.append('.')
+        nueva_cadena.append(letra)
+        
+    correo_generado = "".join(nueva_cadena) + "@" + dominio
+    print(f"[+] Correo limpio generado para esta ejecución: {correo_generado}")
+    return correo_generado
 
-def borrar_alias_simplelogin(alias_id):
-    """Borra el alias de SimpleLogin al finalizar para mantener todo limpio"""
-    if not alias_id:
-        return
-    try:
-        url = f"https://app.simplelogin.io/api/aliases/{alias_id}"
-        requests.delete(url, headers={"Authentication": f"{SIMPLELOGIN_API_KEY}"})
-        print("[+] Alias temporal eliminado correctamente de SimpleLogin.")
-    except Exception as e:
-        print(f"[-] No se pudo borrar el alias de SimpleLogin: {e}")
-
-def leer_correo_imap(user, password, timeout_segundos=60):
-    print("[*] Conectando al buzón para leer el correo de confirmación...")
+def leer_correo_imap_gmx(user, password, timeout_segundos=60):
+    print("[*] Conectando al servidor IMAP de GMX...")
     inicio = time.time()
     servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
     
@@ -84,81 +66,76 @@ def leer_correo_imap(user, password, timeout_segundos=60):
     return None
 
 def main():
-    # Diagnóstico detallado para identificar qué secreto falta en GitHub Actions
     faltantes = []
     if not TARGET_URL: faltantes.append("TARGET_URL")
-    if not SIMPLELOGIN_API_KEY: faltantes.append("SIMPLELOGIN_API_KEY")
     if not GMX_USER: faltantes.append("GMX_USER")
     if not GMX_PASS: faltantes.append("GMX_PASS")
     
     if faltantes:
-        raise Exception(f"[-] Faltan los siguientes secretos en GitHub Actions: {', '.join(faltantes)}. Revisa que estén bien escritos en Settings > Secrets.")
+        raise Exception(f"[-] Faltan los siguientes secretos en GitHub: {', '.join(faltantes)}")
 
-    alias_correo, alias_id = crear_alias_simplelogin_limpio()
+    correo_registro = generar_correo_limpio_con_puntos(GMX_USER)
 
-    try:
-        with sync_playwright() as p:
-            browser = p.firefox.launch(headless=True)
-            context = browser.new_context()
-            page = context.new_page()
+    with sync_playwright() as p:
+        browser = p.firefox.launch(headless=True)
+        context = browser.new_context()
+        page = context.new_page()
 
-            # 1. Registro en la web con el alias limpio de SimpleLogin
-            print(f"[*] Entrando en la web objetivo: {TARGET_URL}")
-            page.goto(TARGET_URL)
-            page.wait_for_timeout(4000)
+        # 1. Registro en la web con el correo único de GMX
+        print(f"[*] Entrando en la web objetivo: {TARGET_URL}")
+        page.goto(TARGET_URL)
+        page.wait_for_timeout(4000)
 
-            email_input = page.locator("input[type='email'], input[type='text']").first
-            email_input.click()
-            email_input.press("Control+A")
-            email_input.press("Backspace")
-            email_input.fill(alias_correo)
-            print(f"[*] Correo introducido con éxito: {alias_correo}")
+        email_input = page.locator("input[type='email'], input[type='text']").first
+        email_input.click()
+        email_input.press("Control+A")
+        email_input.press("Backspace")
+        email_input.fill(correo_registro)
+        print(f"[*] Correo introducido con éxito: {correo_registro}")
 
-            page.evaluate("""() => {
-                const buttons = document.querySelectorAll('button');
-                if (buttons.length > 0) {
-                    buttons[0].click();
-                } else {
-                    throw new Error('No se encontró el botón');
-                }
-            }""")
-            print("[*] Clic ejecutado en el botón de registro. Esperando correo...")
+        page.evaluate("""() => {
+            const buttons = document.querySelectorAll('button');
+            if (buttons.length > 0) {
+                buttons[0].click();
+            } else {
+                throw new Error('No se encontró el botón');
+            }
+        }""")
+        print("[*] Clic ejecutado en el botón de registro. Esperando correo...")
 
-            # 2. Leer el correo que SimpleLogin habrá reenviado a tu bandeja GMX
-            cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
+        # 2. Leer el correo de confirmación directamente por IMAP en GMX
+        cuerpo_correo = leer_correo_imap_gmx(GMX_USER, GMX_PASS)
 
-            if cuerpo_correo:
-                print("[+] ¡Correo de confirmación recibido a través de SimpleLogin!")
-                
-                match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
-                codigo = match_codigo.group(0) if match_codigo else None
+        if cuerpo_correo:
+            print("[+] ¡Correo de confirmación recibido en GMX!")
+            
+            match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
+            codigo = match_codigo.group(0) if match_codigo else None
 
-                match_link = re.search(r'https?://[^\s<>"]+(?:verify|confirm|activat)[^\s<>"]*', cuerpo_correo, re.IGNORECASE)
-                enlace = match_link.group(0) if match_link else None
+            match_link = re.search(r'https?://[^\s<>"]+(?:verify|confirm|activat)[^\s<>"]*', cuerpo_correo, re.IGNORECASE)
+            enlace = match_link.group(0) if match_link else None
 
-                # 3. Aplicar la verificación en la web
-                if codigo:
-                    print(f"[*] Aplicando código de verificación: {codigo}")
-                    code_input = page.locator("input[type='text'], input[name*='code'], input[id*='code']").first
-                    code_input.fill(codigo)
-                    page.keyboard.press("Enter")
-                    page.wait_for_timeout(5000)
-                elif enlace:
-                    print(f"[*] Navegando al enlace de activación: {enlace}")
-                    page.goto(enlace)
-                    page.wait_for_timeout(5000)
+            # 3. Aplicar la verificación en la web
+            if codigo:
+                print(f"[*] Aplicando código de verificación: {codigo}")
+                code_input = page.locator("input[type='text'], input[name*='code'], input[id*='code']").first
+                code_input.fill(codigo)
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(5000)
+            elif enlace:
+                print(f"[*] Navegando al enlace de activación: {enlace}")
+                page.goto(enlace)
+                page.wait_for_timeout(5000)
 
-                url_final = page.url
-                print(f"\n==========================================")
-                print(f"[ ÉXITO ] Registro completado con el alias: {alias_correo}")
-                print(f"[ i ] URL Final: {url_final}")
-                print(f"==========================================\n")
-            else:
-                print("[-] No se recibió el correo de verificación en el tiempo límite.")
+            url_final = page.url
+            print(f"\n==========================================")
+            print(f"[ ÉXITO ] Registro completado con el correo: {correo_registro}")
+            print(f"[ i ] URL Final: {url_final}")
+            print(f"==========================================\n")
+        else:
+            print("[-] No se recibió el correo de verificación en el tiempo límite.")
 
-            browser.close()
-    finally:
-        borrar_alias_simplelogin(alias_id)
+        browser.close()
 
 if __name__ == "__main__":
     main()
