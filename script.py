@@ -1,6 +1,7 @@
 import os
 import time
 import random
+import json
 import imaplib
 import email
 import re
@@ -10,9 +11,8 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Lista con tus 10 alias oficiales ya creados en GMX
-# (Asegúrate de que el dominio @gmx.es o @gmx.com coincida con el tuyo)
-DOMINIO_GMX = GMX_USER.split("@")[1]
+DOMINIO_GMX = GMX_USER.split("@")[1] if GMX_USER else "gmx.es"
+
 ALIAS_DISPONIBLES = [
     f"alberto.soler@{DOMINIO_GMX}",
     f"lucia.mendez@{DOMINIO_GMX}",
@@ -26,16 +26,13 @@ ALIAS_DISPONIBLES = [
     f"valeria.cruz@{DOMINIO_GMX}"
 ]
 
-def seleccionar_alias_aleatorio():
-    """Selecciona uno de los alias al azar e imprime un aviso destacado"""
-    alias_elegido = random.choice(ALIAS_DISPONIBLES)
-    print("\n" + "="*50)
-    print(f" [O] ALIAS SELECCIONADO PARA ESTA EJECUCIÓN: {alias_elegido}")
-    print("="*50 + "\n")
-    return alias_elegido
+def seleccionar_alias():
+    alias = random.choice(ALIAS_DISPONIBLES)
+    print(f"\n[*] Alias seleccionado para esta sesión: {alias}\n")
+    return alias
 
-def leer_correo_imap_gmx(user, password, timeout_segundos=120):
-    print("[*] Conectando al servidor IMAP de GMX para leer el correo...")
+def leer_correo_imap(user, password, timeout_segundos=120):
+    print("[*] Conectando al IMAP de GMX para recuperar el código...")
     inicio = time.time()
     servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
     carpetas = ["INBOX", "Spam", "Junk"]
@@ -53,8 +50,7 @@ def leer_correo_imap_gmx(user, password, timeout_segundos=120):
                         
                     status, messages = mail.search(None, 'UNSEEN')
                     if status == 'OK' and messages[0]:
-                        lista_ids = messages[0].split()
-                        ultimo_id = lista_ids[-1]
+                        ultimo_id = messages[0].split()[-1]
                         res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
                         
                         for response_part in msg_data:
@@ -76,29 +72,22 @@ def leer_correo_imap_gmx(user, password, timeout_segundos=120):
 
             mail.logout()
         except Exception as e:
-            print(f"[-] Reintentando conexión IMAP: {e}")
+            print(f"[-] Error reconectando IMAP: {e}")
         time.sleep(5)
     return None
 
 def main():
-    faltantes = []
-    if not TARGET_URL: faltantes.append("TARGET_URL")
-    if not GMX_USER: faltantes.append("GMX_USER")
-    if not GMX_PASS: faltantes.append("GMX_PASS")
-    
-    if faltantes:
-        raise Exception(f"[-] Faltan los siguientes secretos en GitHub: {', '.join(faltantes)}")
+    if not TARGET_URL or not GMX_USER or not GMX_PASS:
+        raise Exception("[-] Faltan secretos requeridos (TARGET_URL, GMX_USER, GMX_PASS).")
 
-    # 1. Seleccionar un alias de la lista precreada
-    alias_correo = seleccionar_alias_aleatorio()
+    alias_correo = seleccionar_alias()
 
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
         context = browser.new_context()
         page = context.new_page()
 
-        # 2. Registro en la web objetivo con el alias elegido
-        print(f"[*] Entrando en la web objetivo: {TARGET_URL}")
+        print(f"[*] Accediendo a: {TARGET_URL}")
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
@@ -107,23 +96,18 @@ def main():
         email_input.press("Control+A")
         email_input.press("Backspace")
         email_input.fill(alias_correo)
-        print(f"[*] Correo introducido con éxito: {alias_correo}")
+        print(f"[*] Email introducido: {alias_correo}")
 
         page.evaluate("""() => {
             const buttons = document.querySelectorAll('button');
-            if (buttons.length > 0) {
-                buttons[0].click();
-            } else {
-                throw new Error('No se encontró el botón');
-            }
+            if (buttons.length > 0) buttons[0].click();
         }""")
-        print("[*] Clic ejecutado en el botón de registro. Esperando correo...")
+        print("[*] Formulario enviado. Esperando correo de verificación...")
 
-        # 3. Leer el correo de confirmación por IMAP
-        cuerpo_correo = leer_correo_imap_gmx(GMX_USER, GMX_PASS)
+        cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
 
         if cuerpo_correo:
-            print("[+] ¡Correo de confirmación recibido en GMX!")
+            print("[+] Correo recibido con éxito.")
             
             match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
             codigo = match_codigo.group(0) if match_codigo else None
@@ -131,40 +115,46 @@ def main():
             match_link = re.search(r'https?://[^\s<>"]+(?:verify|confirm|activat)[^\s<>"]*', cuerpo_correo, re.IGNORECASE)
             enlace = match_link.group(0) if match_link else None
 
-            # 4. Introducir el código de verificación
             if codigo:
-                print(f"[*] Aplicando código de verificación: {codigo}")
+                print(f"[*] Aplicando código: {codigo}")
                 page.wait_for_timeout(3000)
-                
-                selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code'], input[placeholder*='code']"
-                
+                selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
                 try:
-                    campo_codigo = page.locator(selector_codigo).first
-                    campo_codigo.wait_for(state="visible", timeout=15000)
-                    campo_codigo.click()
-                    campo_codigo.fill(codigo)
+                    campo = page.locator(selector_codigo).first
+                    campo.wait_for(state="visible", timeout=15000)
+                    campo.fill(codigo)
                     page.keyboard.press("Enter")
-                except Exception as ex:
-                    print(f"[*] Probando introducción carácter a carácter: {ex}")
+                except Exception:
                     inputs = page.locator("input").all()
                     for idx, char in enumerate(codigo):
                         if idx < len(inputs):
                             inputs[idx].fill(char)
                     page.keyboard.press("Enter")
-
                 page.wait_for_timeout(5000)
             elif enlace:
-                print(f"[*] Navegando al enlace de activación: {enlace}")
+                print(f"[*] Accediendo al enlace de confirmación: {enlace}")
                 page.goto(enlace)
                 page.wait_for_timeout(5000)
 
             url_final = page.url
-            print(f"\n==========================================")
-            print(f"[ ÉXITO ] Registro completado con el alias: {alias_correo}")
-            print(f"[ i ] URL Final: {url_final}")
-            print(f"==========================================\n")
+            print(f"[+] Registro completado. URL obtenida: {url_final}")
+
+            # Generar datos del resultado en JSON
+            resultado = {
+                "estado": "OK",
+                "alias": alias_correo,
+                "url_final": url_final,
+                "m3u_plus": f"{url_final}/get.php?username={alias_correo}&password=123456&type=m3u_plus",
+                "m3u_standard": f"{url_final}/get.php?username={alias_correo}&password=123456&type=m3u",
+                "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            with open("result.json", "w", encoding="utf-8") as f:
+                json.dump(resultado, f, indent=4, ensure_ascii=False)
+            print("[+] Archivo result.json actualizado.")
+
         else:
-            print("[-] No se recibió el correo de verificación en el tiempo límite.")
+            print("[-] Tiempo de espera agotado sin recibir el correo.")
 
         browser.close()
 
