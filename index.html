@@ -3,32 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador Automático M3U</title>
+    <title>Generador M3U Automático</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; width: 350px; }
-        button { background: #3b82f6; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; width: 100%; transition: background 0.2s; }
-        button:hover { background: #2563eb; }
-        #status { margin-top: 20px; font-size: 14px; color: #94a3b8; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background-color: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 480px; text-align: center; }
+        h2 { margin-top: 0; color: #38bdf8; }
+        p { color: #94a3b8; font-size: 14px; }
+        button { background-color: #0284c7; color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #0369a1; }
+        button:disabled { background-color: #334155; cursor: not-allowed; }
+        #status { margin-top: 15px; font-size: 14px; color: #cbd5e1; min-height: 20px; }
+        .result-box { margin-top: 25px; background: #0f172a; padding: 18px; border-radius: 8px; text-align: left; display: none; border: 1px solid #334155; }
+        .result-box h3 { margin-top: 0; font-size: 16px; color: #4ade80; }
+        .field { margin-bottom: 12px; }
+        .field label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px; }
+        .field input { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #475569; color: #fff; border-radius: 4px; font-size: 12px; box-sizing: border-box; }
     </style>
 </head>
 <body>
+
     <div class="card">
-        <h2>Generador M3U</h2>
-        <p>Haz clic para iniciar el proceso de registro automático.</p>
-        <button onclick="dispararAccion()">Ejecutar Automatización</button>
+        <h2>Panel de Generación M3U</h2>
+        <p>Haz clic abajo para iniciar el proceso de registro automático.</p>
+        <button id="btnGenerar" onclick="lanzarGeneracion()">Generar Cuenta y Listas</button>
         <div id="status"></div>
+
+        <div id="resultadoBox" class="result-box">
+            <h3>¡Proceso Completado!</h3>
+            <div class="field">
+                <label>Alias utilizado:</label>
+                <input type="text" id="resAlias" readonly>
+            </div>
+            <div class="field">
+                <label>Lista M3U Plus:</label>
+                <input type="text" id="resPlus" readonly onclick="this.select()">
+            </div>
+            <div class="field">
+                <label>Lista M3U Standard:</label>
+                <input type="text" id="resStandard" readonly onclick="this.select()">
+            </div>
+        </div>
     </div>
 
     <script>
-        async function dispararAccion() {
-            const statusDiv = document.getElementById("status");
-            statusDiv.innerHTML = "Enviando orden a GitHub...";
+        // CONFIGURACIÓN DE TU REPOSITORIO DE GITHUB
+        const GITHUB_USER = "TU_USUARIO_GITHUB";
+        const REPO_NAME = "TU_REPOSITORIO";
+        const GITHUB_TOKEN = "github_pat_TU_TOKEN_PERSONAL";
 
-            // Nota: Para seguridad, esto requiere un Personal Access Token (PAT) con permisos de repo/actions
-            const GITHUB_USER = "TU_USUARIO_GITHUB";
-            const REPO_NAME = "TU_NOMBRE_REPOSIRIO";
-            const GITHUB_TOKEN = "TU_TOKEN_PERSONAL_GITHUB"; // Opcional si usas un backend ligero, pero necesario si se hace directo desde el navegador
+        async function lanzarGeneracion() {
+            const btn = document.getElementById("btnGenerar");
+            const status = document.getElementById("status");
+            const box = document.getElementById("resultadoBox");
+
+            btn.disabled = true;
+            box.style.display = "none";
+            status.innerHTML = "🚀 Enviando orden a GitHub Actions...";
 
             const url = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/actions/workflows/run.yml/dispatches`;
 
@@ -44,13 +74,38 @@
                 });
 
                 if (response.ok) {
-                    statusDiv.innerHTML = "¡Proceso iniciado en GitHub! Revisa tu Telegram/Discord o los logs en unos segundos.";
+                    status.innerHTML = "⏳ Registro en proceso... Esperando datos (aprox. 30-40s)...";
+                    monitorearResultado();
                 } else {
-                    statusDiv.innerHTML = "Error al iniciar el workflow. Revisa los permisos del Token.";
+                    status.innerHTML = "❌ Error al iniciar. Revisa tu Token o permisos del repo.";
+                    btn.disabled = false;
                 }
-            } catch (error) {
-                statusDiv.innerHTML = "Error de conexión: " + error.message;
+            } catch (err) {
+                status.innerHTML = "❌ Error de conexión: " + err.message;
+                btn.disabled = false;
             }
+        }
+
+        function monitorearResultado() {
+            const intervalo = setInterval(async () => {
+                try {
+                    const res = await fetch('result.json?_=' + new Date().getTime());
+                    if (res.ok) {
+                        const data = await res.json();
+                        
+                        document.getElementById("resAlias").value = data.alias;
+                        document.getElementById("resPlus").value = data.m3u_plus;
+                        document.getElementById("resStandard").value = data.m3u_standard;
+
+                        document.getElementById("resultadoBox").style.display = "block";
+                        document.getElementById("status").innerHTML = "✅ ¡Listas generadas correctamente!";
+                        document.getElementById("btnGenerar").disabled = false;
+                        clearInterval(intervalo);
+                    }
+                } catch (e) {
+                    // Reintentando mientras se genera el archivo...
+                }
+            }, 8000);
         }
     </script>
 </body>
