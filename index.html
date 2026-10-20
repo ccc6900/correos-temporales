@@ -15,7 +15,7 @@
         #status { margin-top: 15px; font-size: 14px; color: #cbd5e1; min-height: 20px; }
         .result-box { margin-top: 25px; background: #0f172a; padding: 18px; border-radius: 8px; text-align: left; display: none; border: 1px solid #334155; }
         .result-box h3 { margin-top: 0; font-size: 16px; color: #4ade80; }
-        .field { margin-bottom: 12px; }
+        .field { margin-bottom: 15px; text-align: left; }
         .field label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px; }
         .field input { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #475569; color: #fff; border-radius: 4px; font-size: 12px; box-sizing: border-box; }
     </style>
@@ -24,7 +24,13 @@
 
     <div class="card">
         <h2>Panel de Generación M3U</h2>
-        <p>Haz clic abajo para iniciar el proceso de registro automático.</p>
+        <p>Introduce tu token una sola vez por dispositivo y genera tus listas.</p>
+        
+        <div class="field">
+            <label>GitHub Personal Access Token (ghp_...):</label>
+            <input type="password" id="inputToken" placeholder="Pega aquí tu token seguro...">
+        </div>
+
         <button id="btnGenerar" onclick="lanzarGeneracion()">Generar Cuenta y Listas</button>
         <div id="status"></div>
 
@@ -46,12 +52,28 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN DE TU REPOSITORIO DE GITHUB
         const GITHUB_USER = "ccc6900";
         const REPO_NAME = "correos-temporales";
-        const GITHUB_TOKEN = "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";
+
+        // Al cargar la página, recupera el token si ya se guardó en este dispositivo
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedToken = localStorage.getItem("github_token");
+            if (savedToken) {
+                document.getElementById("inputToken").value = savedToken;
+            }
+        });
 
         async function lanzarGeneracion() {
+            const tokenInput = document.getElementById("inputToken").value.trim();
+
+            if (!tokenInput) {
+                alert("Por favor, introduce tu Token de GitHub.");
+                return;
+            }
+
+            // Guarda el token en este dispositivo para futuras veces
+            localStorage.setItem("github_token", tokenInput);
+
             const btn = document.getElementById("btnGenerar");
             const status = document.getElementById("status");
             const box = document.getElementById("resultadoBox");
@@ -66,7 +88,7 @@
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+                        'Authorization': `Bearer ${tokenInput}`,
                         'Accept': 'application/vnd.github+json',
                         'Content-Type': 'application/json'
                     },
@@ -76,8 +98,11 @@
                 if (response.ok) {
                     status.innerHTML = "⏳ Registro en proceso... Esperando datos (aprox. 30-40s)...";
                     monitorearResultado();
+                } else if (response.status === 401) {
+                    status.innerHTML = "❌ Error 401: Token inválido o revocado por GitHub.";
+                    btn.disabled = false;
                 } else {
-                    status.innerHTML = "❌ Error al iniciar. Revisa tu Token o permisos del repo.";
+                    status.innerHTML = "❌ Error al iniciar. Código: " + response.status;
                     btn.disabled = false;
                 }
             } catch (err) {
