@@ -1,8 +1,8 @@
 {
     "estado": "OK",
-    "alias": "claudia.prieto@gmx.es",
-    "url_final": "https://www.123prueba.net/verify/34RSIBER3TBBIGRGEANS5JJ7VUE4S36P",
-    "m3u_plus": "https://www.123prueba.net/verify/34RSIBER3TBBIGRGEANS5JJ7VUE4S36P/get.php?username=claudia.prieto@gmx.es&password=123456&type=m3u_plus",
-    "m3u_standard": "https://www.123prueba.net/verify/34RSIBER3TBBIGRGEANS5JJ7VUE4S36P/get.php?username=claudia.prieto@gmx.es&password=123456&type=m3u",
-    "fecha": "2026-10-21 07:03:41"
+    "alias": "sofia.navarro@gmx.es",
+    "url_final": "https://www.123prueba.net/verify/VMRRT2LU2QJH2LL55UFRNYRBU3YLHYTI",
+    "m3u_plus": "https://www.123prueba.net/verify/VMRRT2LU2QJH2LL55UFRNYRBU3YLHYTI/get.php?username=sofia.navarro@gmx.es&password=123456&type=m3u_plus",
+    "m3u_standard": "https://www.123prueba.net/verify/VMRRT2LU2QJH2LL55UFRNYRBU3YLHYTI/get.php?username=sofia.navarro@gmx.es&password=123456&type=m3u",
+    "fecha": "2026-10-21 07:41:02"
 }
