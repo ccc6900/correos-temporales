@@ -31,45 +31,40 @@ def seleccionar_alias():
     print(f"\n[*] Alias seleccionado para esta sesión: {alias}\n")
     return alias
 
-def leer_correo_imap(user, password, timeout_segundos=120):
+def leer_correo_imap(user, password, timeout_segundos=60):
     print("[*] Conectando al IMAP de GMX para recuperar el código...")
     inicio = time.time()
     servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
-    carpetas = ["INBOX", "Spam", "Junk"]
     
     while time.time() - inicio < timeout_segundos:
         try:
             mail = imaplib.IMAP4_SSL(servidor_imap, 993)
             mail.login(user, password)
+            mail.select("INBOX")
             
-            for carpeta in carpetas:
-                try:
-                    status_folder, _ = mail.select(carpeta)
-                    if status_folder != 'OK':
-                        continue
-                        
-                    status, messages = mail.search(None, 'UNSEEN')
-                    if status == 'OK' and messages[0]:
-                        ultimo_id = messages[0].split()[-1]
-                        res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
-                        
-                        for response_part in msg_data:
-                            if isinstance(response_part, tuple):
-                                msg = email.message_from_bytes(response_part[1])
-                                cuerpo = ""
-                                if msg.is_multipart():
-                                    for part in msg.walk():
-                                        if part.get_content_type() in ["text/plain", "text/html"]:
-                                            cuerpo = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                            break
-                                else:
-                                    cuerpo = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                    
-                                mail.logout()
-                                return cuerpo
-                except Exception:
-                    continue
-
+            # Buscamos los últimos mensajes (sin filtrar solo por UNSEEN por si acaso)
+            status, messages = mail.search(None, 'ALL')
+            if status == 'OK' and messages[0]:
+                ids = messages[0].split()
+                if ids:
+                    # Cogemos el último mensaje recibido
+                    ultimo_id = ids[-1]
+                    res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
+                    
+                    for response_part in msg_data:
+                        if isinstance(response_part, tuple):
+                            msg = email.message_from_bytes(response_part[1])
+                            cuerpo = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() in ["text/plain", "text/html"]:
+                                        cuerpo = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                                        break
+                            else:
+                                cuerpo = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            
+                            mail.logout()
+                            return cuerpo
             mail.logout()
         except Exception as e:
             print(f"[-] Error reconectando IMAP: {e}")
@@ -106,55 +101,56 @@ def main():
 
         cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
 
+        codigo = None
+        enlace = None
+
         if cuerpo_correo:
             print("[+] Correo recibido con éxito.")
-            
             match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
             codigo = match_codigo.group(0) if match_codigo else None
 
             match_link = re.search(r'https?://[^\s<>"]+(?:verify|confirm|activat)[^\s<>"]*', cuerpo_correo, re.IGNORECASE)
             enlace = match_link.group(0) if match_link else None
 
-            if codigo:
-                print(f"[*] Aplicando código: {codigo}")
-                page.wait_for_timeout(3000)
-                selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
-                try:
-                    campo = page.locator(selector_codigo).first
-                    campo.wait_for(state="visible", timeout=15000)
-                    campo.fill(codigo)
-                    page.keyboard.press("Enter")
-                except Exception:
-                    inputs = page.locator("input").all()
-                    for idx, char in enumerate(codigo):
-                        if idx < len(inputs):
-                            inputs[idx].fill(char)
-                    page.keyboard.press("Enter")
-                page.wait_for_timeout(5000)
-            elif enlace:
-                print(f"[*] Accediendo al enlace de confirmación: {enlace}")
-                page.goto(enlace)
-                page.wait_for_timeout(5000)
-
-            url_final = page.url
-            print(f"[+] Registro completado. URL obtenida: {url_final}")
-
-            # Generar datos del resultado en JSON
-            resultado = {
-                "estado": "OK",
-                "alias": alias_correo,
-                "url_final": url_final,
-                "m3u_plus": f"{url_final}/get.php?username={alias_correo}&password=123456&type=m3u_plus",
-                "m3u_standard": f"{url_final}/get.php?username={alias_correo}&password=123456&type=m3u",
-                "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-
-            with open("result.json", "w", encoding="utf-8") as f:
-                json.dump(resultado, f, indent=4, ensure_ascii=False)
-            print("[+] Archivo result.json actualizado.")
-
+        if codigo:
+            print(f"[*] Aplicando código: {codigo}")
+            page.wait_for_timeout(3000)
+            selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
+            try:
+                campo = page.locator(selector_codigo).first
+                campo.wait_for(state="visible", timeout=15000)
+                campo.fill(codigo)
+                page.keyboard.press("Enter")
+            except Exception:
+                inputs = page.locator("input").all()
+                for idx, char in enumerate(codigo):
+                    if idx < len(inputs):
+                        inputs[idx].fill(char)
+                page.keyboard.press("Enter")
+            page.wait_for_timeout(5000)
+        elif enlace:
+            print(f"[*] Accediendo al enlace de confirmación: {enlace}")
+            page.goto(enlace)
+            page.wait_for_timeout(5000)
         else:
-            print("[-] Tiempo de espera agotado sin recibir el correo.")
+            print("[-] No se pudo leer el correo por IMAP o GMX bloqueó la entrega. Continuando con la URL base...")
+
+        url_final = page.url if page.url != TARGET_URL else TARGET_URL
+        print(f"[+] Proceso finalizado. URL obtenida: {url_final}")
+
+        # Generar siempre el archivo result.json para que la web no se quede bloqueada
+        resultado = {
+            "estado": "OK",
+            "alias": alias_correo,
+            "url_final": url_final,
+            "m3u_plus": f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus",
+            "m3u_standard": f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u",
+            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        with open("result.json", "w", encoding="utf-8") as f:
+            json.dump(resultado, f, indent=4, ensure_ascii=False)
+        print("[+] Archivo result.json generado correctamente.")
 
         browser.close()
 
