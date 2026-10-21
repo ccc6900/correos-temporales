@@ -24,7 +24,7 @@
 
     <div class="card">
         <h2>Panel de Generación M3U</h2>
-        <p>Introduce tu token una sola vez por dispositivo y genera tus listas.</p>
+        <p>Introduce tu token de GitHub para iniciar el proceso.</p>
         
         <div class="field">
             <label>GitHub Personal Access Token (ghp_...):</label>
@@ -55,7 +55,7 @@
         const GITHUB_USER = "ccc6900";
         const REPO_NAME = "correos-temporales";
 
-        // Al cargar la página, recupera el token si ya se guardó en este dispositivo
+        // Al cargar la página, recupera el token guardado si existe en este dispositivo
         window.addEventListener('DOMContentLoaded', () => {
             const savedToken = localStorage.getItem("github_token");
             if (savedToken) {
@@ -67,11 +67,11 @@
             const tokenInput = document.getElementById("inputToken").value.trim();
 
             if (!tokenInput) {
-                alert("Por favor, introduce tu Token de GitHub.");
+                alert("Por favor, introduce tu Token de GitHub en la casilla.");
                 return;
             }
 
-            // Guarda el token en este dispositivo para futuras veces
+            // Guarda el token en la memoria del navegador del dispositivo actual
             localStorage.setItem("github_token", tokenInput);
 
             const btn = document.getElementById("btnGenerar");
@@ -99,7 +99,7 @@
                     status.innerHTML = "⏳ Registro en proceso... Esperando datos (aprox. 30-40s)...";
                     monitorearResultado();
                 } else if (response.status === 401) {
-                    status.innerHTML = "❌ Error 401: Token inválido o revocado por GitHub.";
+                    status.innerHTML = "❌ Error 401: Token inválido o revocado. Revisa tus permisos.";
                     btn.disabled = false;
                 } else {
                     status.innerHTML = "❌ Error al iniciar. Código: " + response.status;
@@ -128,7 +128,7 @@
                         clearInterval(intervalo);
                     }
                 } catch (e) {
-                    // Reintentando mientras se genera el archivo...
+                    // Esperando respuesta del archivo result.json...
                 }
             }, 8000);
         }
