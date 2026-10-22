@@ -11,10 +11,8 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Tus 10 alias reales (comprobados)
 ALIAS_TOTALES = [
     "alberto.soler@gmx.es",
-    "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
     "elena.garrido2@gmx.es",
     "lucia.mendez2@gmx.es",
@@ -41,19 +39,16 @@ def seleccionar_alias():
     usados = cargar_estado()
     disponibles = [a for a in ALIAS_TOTALES if a not in usados]
     
-    print(f"[*] Alias ya usados anteriormente: {usados}")
-    print(f"[*] Alias disponibles ahora mismo: {disponibles}")
-
     if not disponibles:
         print("[!] ¡Se han agotado todos los alias!")
         return None, usados
         
     alias = random.choice(disponibles)
-    print(f"\n[+] -> ALIAS SELECCIONADO PARA ESTA SESIÓN: {alias}\n")
+    print(f"\n[+] -> ALIAS SELECCIONADO: {alias}\n")
     return alias, usados
 
 def leer_correo_imap(user, password, timeout_segundos=60):
-    print("[*] Conectando al IMAP de GMX para recuperar el código...")
+    print("[*] Conectando al IMAP de GMX...")
     inicio = time.time()
     servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
     
@@ -69,7 +64,6 @@ def leer_correo_imap(user, password, timeout_segundos=60):
                 if ids:
                     ultimo_id = ids[-1]
                     res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
-                    
                     for response_part in msg_data:
                         if isinstance(response_part, tuple):
                             msg = email.message_from_bytes(response_part[1])
@@ -81,28 +75,23 @@ def leer_correo_imap(user, password, timeout_segundos=60):
                                         break
                             else:
                                 cuerpo = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-                            
                             mail.logout()
                             return cuerpo
             mail.logout()
         except Exception as e:
-            print(f"[-] Error reconectando IMAP: {e}")
+            print(f"[-] Error IMAP: {e}")
         time.sleep(5)
     return None
 
 def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
-        raise Exception("[-] Faltan secretos requeridos.")
+        raise Exception("[-] Faltan secretos.")
 
     usados = cargar_estado()
     alias_correo, _ = seleccionar_alias()
 
     if not alias_correo:
-        resultado = {
-            "estado": "AGOTADO",
-            "mensaje": "¡Todos los alias se han agotado!",
-            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
+        resultado = {"estado": "AGOTADO", "mensaje": "¡Todos los alias se han agotado!"}
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
         return
@@ -122,16 +111,13 @@ def main():
 
         email_input = page.locator("input[type='email'], input[type='text']").first
         email_input.click()
-        email_input.press("Control+A")
-        email_input.press("Backspace")
         email_input.fill(alias_correo)
-        print(f"[*] Email introducido en la web: {alias_correo}")
-
+        
         page.evaluate("""() => {
             const buttons = document.querySelectorAll('button');
             if (buttons.length > 0) buttons[0].click();
         }""")
-        print("[*] Formulario enviado. Esperando correo...")
+        print("[*] Esperando correo de verificación...")
 
         cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
         codigo = None
@@ -140,7 +126,7 @@ def main():
             codigo = match_codigo.group(0) if match_codigo else None
 
         if codigo:
-            print(f"[*] Código recibido: {codigo}")
+            print(f"[*] Código aplicado: {codigo}")
             page.wait_for_timeout(3000)
             selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
             try:
@@ -154,43 +140,35 @@ def main():
                     if idx < len(inputs):
                         inputs[idx].fill(char)
                 page.keyboard.press("Enter")
-            page.wait_for_timeout(8000)
+            
+            # Esperar a que cargue la pantalla final
+            page.wait_for_timeout(10000)
 
-        # Extracción de enlaces
-        m3u_plus, m3u_standard = "", ""
-        try:
-            elementos = page.locator("input, a, textarea").all()
-            for el in elementos:
-                val = el.get_attribute("value") or el.get_attribute("href") or el.inner_text()
-                if val and "http" in val and ("m3u" in val.lower() or "get.php" in val.lower()):
-                    if "plus" in val.lower() or "type=m3u_plus" in val.lower():
-                        m3u_plus = val
-                    elif not m3u_standard:
-                        m3u_standard = val
-        except Exception:
-            pass
+        # DIAGNOSTICO: Imprimir todo el texto visible de la página en los logs de GitHub
+        texto_pantalla = page.inner_text("body")
+        print("\n--- TEXTO ENCONTRADO EN LA PANTALLA FINAL ---")
+        print(texto_pantalla)
+        print("----------------------------------------------\n")
 
-        if not m3u_plus or not m3u_standard:
-            content_text = page.inner_text("body")
-            for u in re.findall(r'https?://[^\s<>"]+', content_text):
-                if "m3u" in u.lower() or "get.php" in u.lower():
-                    if "plus" in u.lower() or "type=m3u_plus" in u.lower():
-                        m3u_plus = u
-                    elif not m3u_standard:
-                        m3u_standard = u
+        # Intentar buscar enlaces reales con expresiones regulares más amplias
+        urls_encontradas = re.findall(r'https?://[^\s<>"]+', texto_pantalla)
+        
+        m3u_plus = ""
+        m3u_standard = ""
 
-        url_final = page.url
-        if not m3u_plus:
-            m3u_plus = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus"
-        if not m3u_standard:
-            m3u_standard = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u"
+        for u in urls_encontradas:
+            if "m3u" in u.lower() or "get.php" in u.lower() or "playlist" in u.lower():
+                if "plus" in u.lower() or "type=m3u_plus" in u.lower():
+                    m3u_plus = u
+                elif not m3u_standard:
+                    m3u_standard = u
 
         resultado = {
             "estado": "OK",
             "alias": alias_correo,
-            "url_final": url_final,
-            "m3u_plus": m3u_plus,
-            "m3u_standard": m3u_standard,
+            "url_final": page.url,
+            "m3u_plus": m3u_plus if m3u_plus else "NO_ENCONTRADO_REVISAR_LOGS",
+            "m3u_standard": m3u_standard if m3u_standard else "NO_ENCONTRADO_REVISAR_LOGS",
             "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
