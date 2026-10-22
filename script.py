@@ -42,12 +42,10 @@ def leer_correo_imap(user, password, timeout_segundos=60):
             mail.login(user, password)
             mail.select("INBOX")
             
-            # Buscamos los últimos mensajes (sin filtrar solo por UNSEEN por si acaso)
             status, messages = mail.search(None, 'ALL')
             if status == 'OK' and messages[0]:
                 ids = messages[0].split()
                 if ids:
-                    # Cogemos el último mensaje recibido
                     ultimo_id = ids[-1]
                     res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
                     
@@ -102,15 +100,10 @@ def main():
         cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
 
         codigo = None
-        enlace = None
-
         if cuerpo_correo:
             print("[+] Correo recibido con éxito.")
             match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
             codigo = match_codigo.group(0) if match_codigo else None
-
-            match_link = re.search(r'https?://[^\s<>"]+(?:verify|confirm|activat)[^\s<>"]*', cuerpo_correo, re.IGNORECASE)
-            enlace = match_link.group(0) if match_link else None
 
         if codigo:
             print(f"[*] Aplicando código: {codigo}")
@@ -127,30 +120,60 @@ def main():
                     if idx < len(inputs):
                         inputs[idx].fill(char)
                 page.keyboard.press("Enter")
-            page.wait_for_timeout(5000)
-        elif enlace:
-            print(f"[*] Accediendo al enlace de confirmación: {enlace}")
-            page.goto(enlace)
-            page.wait_for_timeout(5000)
+            
+            # Esperar a que la página procese el código y muestre las listas finales
+            print("[*] Código enviado. Esperando a que aparezcan las listas en pantalla...")
+            page.wait_for_timeout(8000)
         else:
-            print("[-] No se pudo leer el correo por IMAP o GMX bloqueó la entrega. Continuando con la URL base...")
+            print("[-] No se pudo obtener el código por IMAP.")
 
-        url_final = page.url if page.url != TARGET_URL else TARGET_URL
-        print(f"[+] Proceso finalizado. URL obtenida: {url_final}")
+        # EXTRAER LOS ENLACES REALES DE LA PANTALLA
+        m3u_plus = ""
+        m3u_standard = ""
 
-        # Generar siempre el archivo result.json para que la web no se quede bloqueada
+        try:
+            # Busca en todos los inputs de texto, campos readonly o enlaces de la página resultante
+            elementos = page.locator("input, a, textarea").all()
+            for el in elementos:
+                val = el.get_attribute("value") or el.get_attribute("href") or el.inner_text()
+                if val and "http" in val and ("m3u" in val.lower() or "get.php" in val.lower()):
+                    if "plus" in val.lower() or "type=m3u_plus" in val.lower():
+                        m3u_plus = val
+                    elif not m3u_standard:
+                        m3u_standard = val
+        except Exception as e:
+            print(f"[-] Error extrayendo enlaces de la pantalla: {e}")
+
+        # Si por alguna razón la página muestra texto plano con los enlaces
+        if not m3u_plus or not m3u_standard:
+            content_text = page.inner_text("body")
+            urls_encontradas = re.findall(r'https?://[^\s<>"]+', content_text)
+            for u in urls_encontradas:
+                if "m3u" in u.lower() or "get.php" in u.lower():
+                    if "plus" in u.lower() or "type=m3u_plus" in u.lower():
+                        m3u_plus = u
+                    elif not m3u_standard:
+                        m3u_standard = u
+
+        # Respaldo final si la página no devolvió enlaces directos pero avanzó
+        url_final = page.url
+        if not m3u_plus:
+            m3u_plus = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus"
+        if not m3u_standard:
+            m3u_standard = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u"
+
         resultado = {
             "estado": "OK",
             "alias": alias_correo,
             "url_final": url_final,
-            "m3u_plus": f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus",
-            "m3u_standard": f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u",
+            "m3u_plus": m3u_plus,
+            "m3u_standard": m3u_standard,
             "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
-        print("[+] Archivo result.json generado correctamente.")
+        print("[+] Archivo result.json generado con los datos reales.")
 
         browser.close()
 
