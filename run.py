@@ -11,10 +11,15 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
+# Tus 10 alias reales configurados en GMX
 ALIAS_TOTALES = [
     "alberto.soler@gmx.es",
+    "alfredito25@gmx.es",
+    "carlos.villar2@gmx.es",
+    "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
     "elena.garrido2@gmx.es",
+    "javier.blanc@gmx.es",
     "lucia.mendez2@gmx.es",
     "mateo.iglesias@gmx.es",
     "sofia.navarro@gmx.es"
@@ -39,16 +44,19 @@ def seleccionar_alias():
     usados = cargar_estado()
     disponibles = [a for a in ALIAS_TOTALES if a not in usados]
     
+    print(f"[*] Alias ya usados registrados: {usados}")
+    print(f"[*] Alias disponibles en este ciclo: {disponibles}")
+
     if not disponibles:
-        print("[!] ¡Se han agotado todos los alias!")
+        print("[!] ¡Atención: Se han agotado todos los alias!")
         return None, usados
         
     alias = random.choice(disponibles)
-    print(f"\n[+] -> ALIAS SELECCIONADO: {alias}\n")
+    print(f"\n[+] -> ALIAS SELECCIONADO PARA ESTA SESIÓN: {alias}\n")
     return alias, usados
 
 def leer_correo_imap(user, password, timeout_segundos=60):
-    print("[*] Conectando al IMAP de GMX...")
+    print("[*] Conectando al IMAP de GMX para recuperar el código...")
     inicio = time.time()
     servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
     
@@ -64,6 +72,7 @@ def leer_correo_imap(user, password, timeout_segundos=60):
                 if ids:
                     ultimo_id = ids[-1]
                     res, msg_data = mail.fetch(ultimo_id, '(RFC822)')
+                    
                     for response_part in msg_data:
                         if isinstance(response_part, tuple):
                             msg = email.message_from_bytes(response_part[1])
@@ -75,27 +84,35 @@ def leer_correo_imap(user, password, timeout_segundos=60):
                                         break
                             else:
                                 cuerpo = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            
                             mail.logout()
                             return cuerpo
             mail.logout()
         except Exception as e:
-            print(f"[-] Error IMAP: {e}")
+            print(f"[-] Error reconectando IMAP: {e}")
         time.sleep(5)
     return None
 
 def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
-        raise Exception("[-] Faltan secretos.")
+        raise Exception("[-] Faltan secretos requeridos (TARGET_URL, GMX_USER, GMX_PASS).")
 
     usados = cargar_estado()
     alias_correo, _ = seleccionar_alias()
 
+    # Si no quedan alias disponibles, generamos el JSON de agotado
     if not alias_correo:
-        resultado = {"estado": "AGOTADO", "mensaje": "¡Todos los alias se han agotado!"}
+        resultado = {
+            "estado": "AGOTADO",
+            "mensaje": "¡Todos los alias de GMX se han agotado! Limpia usados.json para reiniciar.",
+            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
+        print("[!] Archivo result.json guardado con estado AGOTADO.")
         return
 
+    # Registrar localmente el alias usado para que el git-auto-commit lo suba
     if alias_correo not in usados:
         usados.append(alias_correo)
         guardar_estado(usados)
@@ -105,28 +122,33 @@ def main():
         context = browser.new_context()
         page = context.new_page()
 
-        print(f"[*] Accediendo a: {TARGET_URL}")
+        print(f"[*] Accediendo al objetivo: {TARGET_URL}")
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
         email_input = page.locator("input[type='email'], input[type='text']").first
         email_input.click()
+        email_input.press("Control+A")
+        email_input.press("Backspace")
         email_input.fill(alias_correo)
-        
+        print(f"[*] Email introducido: {alias_correo}")
+
         page.evaluate("""() => {
             const buttons = document.querySelectorAll('button');
             if (buttons.length > 0) buttons[0].click();
         }""")
-        print("[*] Esperando correo de verificación...")
+        print("[*] Formulario enviado. Esperando correo de verificación...")
 
         cuerpo_correo = leer_correo_imap(GMX_USER, GMX_PASS)
+
         codigo = None
         if cuerpo_correo:
+            print("[+] Correo recibido con éxito.")
             match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
             codigo = match_codigo.group(0) if match_codigo else None
 
         if codigo:
-            print(f"[*] Código aplicado: {codigo}")
+            print(f"[*] Aplicando código: {codigo}")
             page.wait_for_timeout(3000)
             selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
             try:
@@ -141,39 +163,60 @@ def main():
                         inputs[idx].fill(char)
                 page.keyboard.press("Enter")
             
-            # Esperar a que cargue la pantalla final
+            print("[*] Código enviado. Esperando a que aparezcan las listas en pantalla...")
             page.wait_for_timeout(10000)
+        else:
+            print("[-] No se pudo obtener el código por IMAP.")
 
-        # DIAGNOSTICO: Imprimir todo el texto visible de la página en los logs de GitHub
+        # DIAGNÓSTICO: Imprimir texto visible de la pantalla final en los logs
         texto_pantalla = page.inner_text("body")
         print("\n--- TEXTO ENCONTRADO EN LA PANTALLA FINAL ---")
-        print(texto_pantalla)
+        print(texto_pantalla[:1000]) # Muestra los primeros 1000 caracteres en los logs
         print("----------------------------------------------\n")
 
-        # Intentar buscar enlaces reales con expresiones regulares más amplias
-        urls_encontradas = re.findall(r'https?://[^\s<>"]+', texto_pantalla)
-        
+        # Extracción robusta de enlaces reales de la pantalla
         m3u_plus = ""
         m3u_standard = ""
 
-        for u in urls_encontradas:
-            if "m3u" in u.lower() or "get.php" in u.lower() or "playlist" in u.lower():
-                if "plus" in u.lower() or "type=m3u_plus" in u.lower():
-                    m3u_plus = u
-                elif not m3u_standard:
-                    m3u_standard = u
+        try:
+            elementos = page.locator("input, a, textarea").all()
+            for el in elementos:
+                val = el.get_attribute("value") or el.get_attribute("href") or el.inner_text()
+                if val and "http" in val and ("m3u" in val.lower() or "get.php" in val.lower()):
+                    if "plus" in val.lower() or "type=m3u_plus" in val.lower():
+                        m3u_plus = val
+                    elif not m3u_standard:
+                        m3u_standard = val
+        except Exception as e:
+            print(f"[-] Error extrayendo elementos: {e}")
+
+        if not m3u_plus or not m3u_standard:
+            urls_encontradas = re.findall(r'https?://[^\s<>"]+', texto_pantalla)
+            for u in urls_encontradas:
+                if "m3u" in u.lower() or "get.php" in u.lower():
+                    if "plus" in u.lower() or "type=m3u_plus" in u.lower():
+                        m3u_plus = u
+                    elif not m3u_standard:
+                        m3u_standard = u
+
+        url_final = page.url
+        if not m3u_plus:
+            m3u_plus = f"NO_ENCONTRADO_REVISAR_LOGS"
+        if not m3u_standard:
+            m3u_standard = f"NO_ENCONTRADO_REVISAR_LOGS"
 
         resultado = {
             "estado": "OK",
             "alias": alias_correo,
-            "url_final": page.url,
-            "m3u_plus": m3u_plus if m3u_plus else "NO_ENCONTRADO_REVISAR_LOGS",
-            "m3u_standard": m3u_standard if m3u_standard else "NO_ENCONTRADO_REVISAR_LOGS",
+            "url_final": url_final,
+            "m3u_plus": m3u_plus,
+            "m3u_standard": m3u_standard,
             "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
+        print("[+] Archivo result.json generado correctamente.")
 
         browser.close()
 
