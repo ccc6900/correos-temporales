@@ -5,6 +5,7 @@ import json
 import imaplib
 import email
 import re
+import subprocess
 from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("TARGET_URL")
@@ -13,23 +14,62 @@ GMX_PASS = os.environ.get("GMX_PASS")
 
 DOMINIO_GMX = GMX_USER.split("@")[1] if GMX_USER else "gmx.es"
 
-ALIAS_DISPONIBLES = [
-    f"alberto.soler@{DOMINIO_GMX}",
-    f"lucia.mendez@{DOMINIO_GMX}",
-    f"carlos.villar@{DOMINIO_GMX}",
-    f"elena.garrido@{DOMINIO_GMX}",
-    f"javier.blanco@{DOMINIO_GMX}",
-    f"sofia.navarro@{DOMINIO_GMX}",
-    f"david.ortega@{DOMINIO_GMX}",
-    f"claudia.prieto@{DOMINIO_GMX}",
-    f"mateo.iglesias@{DOMINIO_GMX}",
-    f"valeria.cruz@{DOMINIO_GMX}"
+# Tus 10 alias reales configurados en GMX
+ALIAS_TOTALES = [
+    "alberto.soler@gmx.es",
+    "carlos.villar2@gmx.es",
+    "claudia.prieto@gmx.es",
+    "david.ortega@gmx.es",
+    "elena.garrido2@gmx.es",
+    "javier.blanc@gmx.es",
+    "lucia.mendez2@gmx.es",
+    "mateo.iglesias@gmx.es",
+    "sofia.navarro@gmx.es"
 ]
 
+ARCHIVO_ESTADO = "usados.json"
+
+def cargar_estado():
+    if os.path.exists(ARCHIVO_ESTADO):
+        try:
+            with open(ARCHIVO_ESTADO, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def guardar_estado(usados):
+    with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
+        json.dump(usados, f, indent=4, ensure_ascii=False)
+
 def seleccionar_alias():
-    alias = random.choice(ALIAS_DISPONIBLES)
+    usados = cargar_estado()
+    disponibles = [a for a in ALIAS_TOTALES if a not in usados]
+    
+    # Si se han usado todos, devolvemos None para activar el aviso de agotado
+    if not disponibles:
+        print("[!] ¡Atención: Se han agotado todos los alias!")
+        return None, usados
+        
+    alias = random.choice(disponibles)
     print(f"\n[*] Alias seleccionado para esta sesión: {alias}\n")
-    return alias
+    return alias, usados
+
+def registrar_alias_usado(alias):
+    usados = cargar_estado()
+    if alias not in usados:
+        usados.append(alias)
+        guardar_estado(usados)
+        # Hacer commit y push automático a GitHub para guardar el estado de los usados
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", ARCHIVO_ESTADO], check=True)
+            subprocess.run(["git", "commit", "-m", f"Actualizar alias usados: {alias}"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print("[+] Estado de alias guardado en el repositorio.")
+        except Exception as e:
+            print(f"[-] No se pudo hacer git push del estado: {e}")
 
 def leer_correo_imap(user, password, timeout_segundos=60):
     print("[*] Conectando al IMAP de GMX para recuperar el código...")
@@ -73,14 +113,26 @@ def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
         raise Exception("[-] Faltan secretos requeridos (TARGET_URL, GMX_USER, GMX_PASS).")
 
-    alias_correo = seleccionar_alias()
+    alias_correo, _ = seleccionar_alias()
+
+    # Si no quedan alias disponibles, generamos el JSON de agotado y paramos
+    if not alias_correo:
+        resultado = {
+            "estado": "AGOTADO",
+            "mensaje": "¡Todos los alias de GMX se han agotado! Reinicia el ciclo limpiando usados.json.",
+            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        with open("result.json", "w", encoding="utf-8") as f:
+            json.dump(resultado, f, indent=4, ensure_ascii=False)
+        print("[!] Archivo result.json guardado con estado AGOTADO.")
+        return
 
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
         context = browser.new_context()
         page = context.new_page()
 
-        print(f"[*] Accediendo a: {TARGET_URL}")
+        print(f"[*] Accediendo al objetivo: {TARGET_URL}")
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
@@ -121,18 +173,16 @@ def main():
                         inputs[idx].fill(char)
                 page.keyboard.press("Enter")
             
-            # Esperar a que la página procese el código y muestre las listas finales
             print("[*] Código enviado. Esperando a que aparezcan las listas en pantalla...")
             page.wait_for_timeout(8000)
         else:
             print("[-] No se pudo obtener el código por IMAP.")
 
-        # EXTRAER LOS ENLACES REALES DE LA PANTALLA
+        # Extracción de enlaces reales de la pantalla
         m3u_plus = ""
         m3u_standard = ""
 
         try:
-            # Busca en todos los inputs de texto, campos readonly o enlaces de la página resultante
             elementos = page.locator("input, a, textarea").all()
             for el in elementos:
                 val = el.get_attribute("value") or el.get_attribute("href") or el.inner_text()
@@ -144,7 +194,6 @@ def main():
         except Exception as e:
             print(f"[-] Error extrayendo enlaces de la pantalla: {e}")
 
-        # Si por alguna razón la página muestra texto plano con los enlaces
         if not m3u_plus or not m3u_standard:
             content_text = page.inner_text("body")
             urls_encontradas = re.findall(r'https?://[^\s<>"]+', content_text)
@@ -155,7 +204,6 @@ def main():
                     elif not m3u_standard:
                         m3u_standard = u
 
-        # Respaldo final si la página no devolvió enlaces directos pero avanzó
         url_final = page.url
         if not m3u_plus:
             m3u_plus = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus"
@@ -176,6 +224,9 @@ def main():
         print("[+] Archivo result.json generado con los datos reales.")
 
         browser.close()
+
+    # Registrar el alias como usado y actualizar GitHub para la próxima vez
+    registrar_alias_usado(alias_correo)
 
 if __name__ == "__main__":
     main()
