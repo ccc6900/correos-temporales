@@ -1,8 +1,8 @@
 {
     "estado": "OK",
-    "alias": "carlos.villar2@gmx.es",
-    "url_final": "https://www.123prueba.net/verify/7Z5H3XB56HALYK5KVCMANBMSTBAFJ6VA",
-    "m3u_plus": "https://www.123prueba.net/verify/7Z5H3XB56HALYK5KVCMANBMSTBAFJ6VA/get.php?username=carlos.villar2@gmx.es&password=123456&type=m3u_plus",
-    "m3u_standard": "https://www.123prueba.net/verify/7Z5H3XB56HALYK5KVCMANBMSTBAFJ6VA/get.php?username=carlos.villar2@gmx.es&password=123456&type=m3u",
-    "fecha": "2026-10-22 08:08:40"
+    "alias": "javier.blanc@gmx.es",
+    "url_final": "https://www.123prueba.net/verify/2KZ7O4SQBEGGAGLTH3NUDJ42QVBZK46N",
+    "m3u_plus": "https://www.123prueba.net/verify/2KZ7O4SQBEGGAGLTH3NUDJ42QVBZK46N/get.php?username=javier.blanc@gmx.es&password=123456&type=m3u_plus",
+    "m3u_standard": "https://www.123prueba.net/verify/2KZ7O4SQBEGGAGLTH3NUDJ42QVBZK46N/get.php?username=javier.blanc@gmx.es&password=123456&type=m3u",
+    "fecha": "2026-10-22 08:11:49"
 }
