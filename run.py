@@ -11,7 +11,7 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Tus alias configurados
+# Tus 4 alias actuales
 ALIAS_TOTALES = [
     "david.ortega@gmx.es",
     "lucia.mendez2@gmx.es",
@@ -119,12 +119,13 @@ def main():
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
+        # Selección y limpieza forzada del campo de correo
         email_input = page.locator("input[type='email'], input[type='text']").first
         email_input.click()
         email_input.press("Control+A")
         email_input.press("Backspace")
         email_input.fill(alias_correo)
-        print(f"[*] Email introducido correctamente: {alias_correo}")
+        print(f"[*] Email introducido en la web: {alias_correo}")
 
         page.evaluate("""() => {
             const buttons = document.querySelectorAll('button');
@@ -182,10 +183,12 @@ def main():
                         m3u_standard = u
 
         url_final = page.url
+        
+        # Si no se encuentran los enlaces reales, se indica exactamente NO_ENCONTRADO_REVISAR_LOGS
         if not m3u_plus:
-            m3u_plus = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u_plus"
+            m3u_plus = "NO_ENCONTRADO_REVISAR_LOGS"
         if not m3u_standard:
-            m3u_standard = f"{url_final.rstrip('/')}/get.php?username={alias_correo}&password=123456&type=m3u"
+            m3u_standard = "NO_ENCONTRADO_REVISAR_LOGS"
 
         resultado = {
             "estado": "OK",
@@ -198,7 +201,7 @@ def main():
 
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
-        print("[+] Archivo result.json generado con el alias correcto.")
+        print("[+] Archivo result.json generado.")
 
         browser.close()
 
