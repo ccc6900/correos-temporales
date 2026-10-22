@@ -11,15 +11,9 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Tus 10 alias reales configurados en GMX
+# Tus alias configurados
 ALIAS_TOTALES = [
-    "alberto.soler@gmx.es",
-    "alfredito25@gmx.es",
-    "carlos.villar2@gmx.es",
-    "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
-    "elena.garrido2@gmx.es",
-    "javier.blanc@gmx.es",
     "lucia.mendez2@gmx.es",
     "mateo.iglesias@gmx.es",
     "sofia.navarro@gmx.es"
@@ -69,7 +63,6 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
             status, messages = mail.search(None, 'ALL')
             if status == 'OK' and messages[0]:
                 ids = messages[0].split()
-                # Revisar desde el mensaje más reciente al más antiguo
                 for msg_id in reversed(ids):
                     res, msg_data = mail.fetch(msg_id, '(RFC822)')
                     for response_part in msg_data:
@@ -77,7 +70,6 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
                             msg = email.message_from_bytes(response_part[1])
                             destinatario = msg.get("To", "")
                             
-                            # Comprobar si el correo va dirigido específicamente a este alias
                             if alias_objetivo.lower() in destinatario.lower():
                                 cuerpo = ""
                                 if msg.is_multipart():
@@ -140,7 +132,6 @@ def main():
         }""")
         print("[*] Formulario enviado. Esperando correo de verificación específico...")
 
-        # Llamamos pasando el alias exacto para que filtre por él
         cuerpo_correo = leer_correo_imap_para_alias(GMX_USER, GMX_PASS, alias_correo)
 
         codigo = None
@@ -166,7 +157,6 @@ def main():
             
             page.wait_for_timeout(8000)
 
-        # Extracción de enlaces de la pantalla final
         texto_pantalla = page.inner_text("body")
         m3u_plus, m3u_standard = "", ""
 
