@@ -5,7 +5,6 @@ import json
 import imaplib
 import email
 import re
-import subprocess
 from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("TARGET_URL")
@@ -17,7 +16,6 @@ DOMINIO_GMX = GMX_USER.split("@")[1] if GMX_USER else "gmx.es"
 # Tus 10 alias reales configurados en GMX
 ALIAS_TOTALES = [
     "alberto.soler@gmx.es",
-    "carlos.villar2@gmx.es",
     "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
     "elena.garrido2@gmx.es",
@@ -46,7 +44,7 @@ def seleccionar_alias():
     usados = cargar_estado()
     disponibles = [a for a in ALIAS_TOTALES if a not in usados]
     
-    # Si se han usado todos, devolvemos None para activar el aviso de agotado
+    # Si se han usado todos, activamos el aviso de agotado
     if not disponibles:
         print("[!] ¡Atención: Se han agotado todos los alias!")
         return None, usados
@@ -54,22 +52,6 @@ def seleccionar_alias():
     alias = random.choice(disponibles)
     print(f"\n[*] Alias seleccionado para esta sesión: {alias}\n")
     return alias, usados
-
-def registrar_alias_usado(alias):
-    usados = cargar_estado()
-    if alias not in usados:
-        usados.append(alias)
-        guardar_estado(usados)
-        # Hacer commit y push automático a GitHub para guardar el estado de los usados
-        try:
-            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
-            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
-            subprocess.run(["git", "add", ARCHIVO_ESTADO], check=True)
-            subprocess.run(["git", "commit", "-m", f"Actualizar alias usados: {alias}"], check=True)
-            subprocess.run(["git", "push"], check=True)
-            print("[+] Estado de alias guardado en el repositorio.")
-        except Exception as e:
-            print(f"[-] No se pudo hacer git push del estado: {e}")
 
 def leer_correo_imap(user, password, timeout_segundos=60):
     print("[*] Conectando al IMAP de GMX para recuperar el código...")
@@ -113,6 +95,7 @@ def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
         raise Exception("[-] Faltan secretos requeridos (TARGET_URL, GMX_USER, GMX_PASS).")
 
+    usados = cargar_estado()
     alias_correo, _ = seleccionar_alias()
 
     # Si no quedan alias disponibles, generamos el JSON de agotado y paramos
@@ -126,6 +109,11 @@ def main():
             json.dump(resultado, f, indent=4, ensure_ascii=False)
         print("[!] Archivo result.json guardado con estado AGOTADO.")
         return
+
+    # Añadimos inmediatamente este alias a la lista local de usados para que se guarde
+    if alias_correo not in usados:
+        usados.append(alias_correo)
+        guardar_estado(usados)
 
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=True)
@@ -224,9 +212,6 @@ def main():
         print("[+] Archivo result.json generado con los datos reales.")
 
         browser.close()
-
-    # Registrar el alias como usado y actualizar GitHub para la próxima vez
-    registrar_alias_usado(alias_correo)
 
 if __name__ == "__main__":
     main()
