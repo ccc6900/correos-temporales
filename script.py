@@ -19,7 +19,6 @@ ALIAS_TOTALES = [
     "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
     "elena.garrido2@gmx.es",
-    "javier.blanc@gmx.es",
     "lucia.mendez2@gmx.es",
     "mateo.iglesias@gmx.es",
     "sofia.navarro@gmx.es"
