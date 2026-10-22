@@ -14,12 +14,8 @@ GMX_PASS = os.environ.get("GMX_PASS")
 # Tus 10 alias reales configurados en GMX
 ALIAS_TOTALES = [
     "alberto.soler@gmx.es",
-    "alfredito25@gmx.es",
-    "carlos.villar2@gmx.es",
-    "claudia.prieto@gmx.es",
     "david.ortega@gmx.es",
     "elena.garrido2@gmx.es",
-    "javier.blanc@gmx.es",
     "lucia.mendez2@gmx.es",
     "mateo.iglesias@gmx.es",
     "sofia.navarro@gmx.es"
