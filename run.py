@@ -11,7 +11,6 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Tu nueva lista de 9 alias configurados en GMX
 ALIAS_TOTALES = [
     "alicia.morales2@gmx.es",
     "andres.navas@gmx.es",
@@ -68,7 +67,6 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
             status, messages = mail.search(None, 'ALL')
             if status == 'OK' and messages[0]:
                 ids = messages[0].split()
-                # Revisar desde el mensaje más reciente al más antiguo
                 for msg_id in reversed(ids):
                     res, msg_data = mail.fetch(msg_id, '(RFC822)')
                     for response_part in msg_data:
@@ -76,7 +74,6 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
                             msg = email.message_from_bytes(response_part[1])
                             destinatario = msg.get("To", "")
                             
-                            # Validar que el correo sea específicamente para el alias de la sesión
                             if alias_objetivo.lower() in destinatario.lower():
                                 cuerpo = ""
                                 if msg.is_multipart():
@@ -95,6 +92,23 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
             print(f"[-] Error reconectando IMAP: {e}")
         time.sleep(5)
     return None
+
+def extraer_enlaces(texto):
+    """Busca y limpia enlaces M3U Plus y Standard de un texto dado"""
+    p_plus, p_std = "", ""
+    # Normalizar códigos URL si los hay
+    texto_limpio = texto.replace('%3F', '?').replace('%26', '&').replace('%3D', '=')
+    urls = re.findall(r'https?://[^\s<>"\']+', texto_limpio)
+    
+    for u in urls:
+        if "m3u" in u.lower() or "get.php" in u.lower():
+            if "plus" in u.lower() or "type=m3u_plus" in u.lower():
+                if not p_plus: p_plus = u
+            elif "type=m3u" in u.lower() and "plus" not in u.lower():
+                if not p_std: p_std = u
+            elif not p_std and "plus" not in u.lower():
+                p_std = u
+    return p_plus, p_std
 
 def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
@@ -126,12 +140,13 @@ def main():
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
-        # Rellenar y asegurar la limpieza del campo de email
+        # Limpieza robusta y llenado de email
         email_input = page.locator("input[type='email'], input[type='text']").first
         email_input.click()
         email_input.press("Control+A")
         email_input.press("Backspace")
-        email_input.fill(alias_correo)
+        email_input.fill("")
+        email_input.type(alias_correo, delay=50)
         print(f"[*] Email introducido correctamente: {alias_correo}")
 
         page.evaluate("""() => {
@@ -165,38 +180,20 @@ def main():
             
             page.wait_for_timeout(8000)
 
-        # DIAGNÓSTICO: Imprimir contenido de pantalla en los logs de GitHub Actions
         texto_pantalla = page.inner_text("body")
-        print("\n--- TEXTO ENCONTRADO EN LA PANTALLA FINAL ---")
-        print(texto_pantalla[:1000])
-        print("----------------------------------------------\n")
+        
+        # Intentar extraer de la pantalla web
+        m3u_plus, m3u_standard = extraer_enlaces(texto_pantalla)
 
-        m3u_plus, m3u_standard = "", ""
-
-        try:
-            elementos = page.locator("input, a, textarea").all()
-            for el in elementos:
-                val = el.get_attribute("value") or el.get_attribute("href") or el.inner_text()
-                if val and "http" in val and ("m3u" in val.lower() or "get.php" in val.lower()):
-                    if "plus" in val.lower() or "type=m3u_plus" in val.lower():
-                        m3u_plus = val
-                    elif not m3u_standard:
-                        m3u_standard = val
-        except Exception:
-            pass
-
-        if not m3u_plus or not m3u_standard:
-            urls_encontradas = re.findall(r'https?://[^\s<>"]+', texto_pantalla)
-            for u in urls_encontradas:
-                if "m3u" in u.lower() or "get.php" in u.lower():
-                    if "plus" in u.lower() or "type=m3u_plus" in u.lower():
-                        m3u_plus = u
-                    elif not m3u_standard:
-                        m3u_standard = u
+        # Si falta alguno, buscar también en el cuerpo del correo (por si el correo trae los enlaces finales)
+        if (not m3u_plus or not m3u_standard) and cuerpo_correo:
+            correo_plus, correo_std = extraer_enlaces(cuerpo_correo)
+            if not m3u_plus: m3u_plus = correo_plus
+            if not m3u_standard: m3u_standard = correo_std
 
         url_final = page.url
 
-        # Asignar fallback exacto en caso de no extraer el enlace directo de la pantalla
+        # Fallback definitivo si ninguna fuente devolvió el enlace
         if not m3u_plus:
             m3u_plus = "NO_ENCONTRADO_REVISAR_LOGS"
         if not m3u_standard:
@@ -213,7 +210,7 @@ def main():
 
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
-        print("[+] Archivo result.json generado correctamente.")
+        print("[+] Archivo result.json generado con éxito.")
 
         browser.close()
 
