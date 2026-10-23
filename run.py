@@ -11,12 +11,17 @@ TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-# Tus 4 alias actuales
+# Tu nueva lista de 9 alias configurados en GMX
 ALIAS_TOTALES = [
-    "david.ortega@gmx.es",
-    "lucia.mendez2@gmx.es",
-    "mateo.iglesias@gmx.es",
-    "sofia.navarro@gmx.es"
+    "alicia.morales2@gmx.es",
+    "andres.navas@gmx.es",
+    "beatriz.robles@gmx.es",
+    "diego.pastor2@gmx.es",
+    "irene.castello@gmx.es",
+    "marcos.solis@gmx.es",
+    "natalia.vega2@gmx.es",
+    "pablo.cabrera@gmx.es",
+    "valeria.guerrero@gmx.es"
 ]
 
 ARCHIVO_ESTADO = "usados.json"
@@ -63,6 +68,7 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
             status, messages = mail.search(None, 'ALL')
             if status == 'OK' and messages[0]:
                 ids = messages[0].split()
+                # Revisar desde el mensaje más reciente al más antiguo
                 for msg_id in reversed(ids):
                     res, msg_data = mail.fetch(msg_id, '(RFC822)')
                     for response_part in msg_data:
@@ -70,6 +76,7 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
                             msg = email.message_from_bytes(response_part[1])
                             destinatario = msg.get("To", "")
                             
+                            # Validar que el correo sea específicamente para el alias de la sesión
                             if alias_objetivo.lower() in destinatario.lower():
                                 cuerpo = ""
                                 if msg.is_multipart():
@@ -119,13 +126,13 @@ def main():
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
-        # Selección y limpieza forzada del campo de correo
+        # Rellenar y asegurar la limpieza del campo de email
         email_input = page.locator("input[type='email'], input[type='text']").first
         email_input.click()
         email_input.press("Control+A")
         email_input.press("Backspace")
         email_input.fill(alias_correo)
-        print(f"[*] Email introducido en la web: {alias_correo}")
+        print(f"[*] Email introducido correctamente: {alias_correo}")
 
         page.evaluate("""() => {
             const buttons = document.querySelectorAll('button');
@@ -158,7 +165,12 @@ def main():
             
             page.wait_for_timeout(8000)
 
+        # DIAGNÓSTICO: Imprimir contenido de pantalla en los logs de GitHub Actions
         texto_pantalla = page.inner_text("body")
+        print("\n--- TEXTO ENCONTRADO EN LA PANTALLA FINAL ---")
+        print(texto_pantalla[:1000])
+        print("----------------------------------------------\n")
+
         m3u_plus, m3u_standard = "", ""
 
         try:
@@ -183,8 +195,8 @@ def main():
                         m3u_standard = u
 
         url_final = page.url
-        
-        # Si no se encuentran los enlaces reales, se indica exactamente NO_ENCONTRADO_REVISAR_LOGS
+
+        # Asignar fallback exacto en caso de no extraer el enlace directo de la pantalla
         if not m3u_plus:
             m3u_plus = "NO_ENCONTRADO_REVISAR_LOGS"
         if not m3u_standard:
@@ -201,7 +213,7 @@ def main():
 
         with open("result.json", "w", encoding="utf-8") as f:
             json.dump(resultado, f, indent=4, ensure_ascii=False)
-        print("[+] Archivo result.json generado.")
+        print("[+] Archivo result.json generado correctamente.")
 
         browser.close()
 
