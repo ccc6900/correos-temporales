@@ -94,9 +94,7 @@ def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos
     return None
 
 def extraer_enlaces(texto):
-    """Busca y limpia enlaces M3U Plus y Standard de un texto dado"""
     p_plus, p_std = "", ""
-    # Normalizar códigos URL si los hay
     texto_limpio = texto.replace('%3F', '?').replace('%26', '&').replace('%3D', '=')
     urls = re.findall(r'https?://[^\s<>"\']+', texto_limpio)
     
@@ -140,19 +138,27 @@ def main():
         page.goto(TARGET_URL)
         page.wait_for_timeout(4000)
 
-        # Limpieza robusta y llenado de email
-        email_input = page.locator("input[type='email'], input[type='text']").first
+        # SELECCIÓN PRECISA: Buscar el campo de email de forma exacta
+        email_input = page.locator("input[type='email'], input[name*='email'], input[placeholder*='correo'], input[placeholder*='email']").first
+        if email_input.count() == 0:
+            email_input = page.locator("input[type='text']").first
+
         email_input.click()
         email_input.press("Control+A")
         email_input.press("Backspace")
-        email_input.fill("")
-        email_input.type(alias_correo, delay=50)
-        print(f"[*] Email introducido correctamente: {alias_correo}")
+        email_input.fill(alias_correo)
+        
+        # VERIFICACIÓN EN LOGS: Comprobar que la web ha registrado el valor exacto
+        valor_en_web = email_input.input_value()
+        print(f"[*] Verificación input web -> Escrito: '{alias_correo}' | Detectado en campo: '{valor_en_web}'")
 
-        page.evaluate("""() => {
-            const buttons = document.querySelectorAll('button');
-            if (buttons.length > 0) buttons[0].click();
-        }""")
+        # BUSCAR BOTÓN DE ENVÍO ESPECÍFICO (evitando clics en elementos erróneos)
+        submit_btn = page.locator("button[type='submit'], input[type='submit'], button:has-text('Enviar'), button:has-text('Generar'), button:has-text('Continuar'), button:has-text('Registrar')").first
+        if submit_btn.count() > 0:
+            submit_btn.click()
+        else:
+            page.keyboard.press("Enter")
+
         print("[*] Formulario enviado. Esperando correo de verificación específico...")
 
         cuerpo_correo = leer_correo_imap_para_alias(GMX_USER, GMX_PASS, alias_correo)
@@ -178,14 +184,16 @@ def main():
                         inputs[idx].fill(char)
                 page.keyboard.press("Enter")
             
-            page.wait_for_timeout(8000)
+            try:
+                print("[*] Esperando pantalla final (/plan/)...")
+                page.wait_for_url("**/plan/**", timeout=15000)
+            except Exception:
+                page.wait_for_timeout(10000)
 
         texto_pantalla = page.inner_text("body")
         
-        # Intentar extraer de la pantalla web
         m3u_plus, m3u_standard = extraer_enlaces(texto_pantalla)
 
-        # Si falta alguno, buscar también en el cuerpo del correo (por si el correo trae los enlaces finales)
         if (not m3u_plus or not m3u_standard) and cuerpo_correo:
             correo_plus, correo_std = extraer_enlaces(cuerpo_correo)
             if not m3u_plus: m3u_plus = correo_plus
@@ -193,7 +201,6 @@ def main():
 
         url_final = page.url
 
-        # Fallback definitivo si ninguna fuente devolvió el enlace
         if not m3u_plus:
             m3u_plus = "NO_ENCONTRADO_REVISAR_LOGS"
         if not m3u_standard:
