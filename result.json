@@ -1,8 +1,8 @@
 {
     "estado": "OK",
-    "alias": "beatriz.robles@gmx.es",
-    "url_final": "https://www.123prueba.net/plan/beatriz.robles@gmx.es/57624-70413",
-    "m3u_plus": "http://trial.123gate.org:8080/get.php%3Fusername=TV-5762426683321&password=777874328108&type=m3u_plus&output=m3u8",
-    "m3u_standard": "NO_ENCONTRADO_REVISAR_LOGS",
-    "fecha": "2026-10-23 06:48:26"
+    "alias": "diego.pastor2@gmx.es",
+    "url_final": "https://www.123prueba.net/verify/PSZFXGXMJGBEYUFHRN4UA74LFL726GMW",
+    "m3u_plus": "http://trial.123gate.org:8080/get.php?username=TV-5762546219216&amp;password=809695701361&amp;type=m3u_plus&amp;output=m3u8",
+    "m3u_standard": "http://trial.123gate.org:8080/get.php?username=TV-5762546219216&amp;password=809695701361&amp;type=m3u&amp;output=m3u8",
+    "fecha": "2026-10-23 07:17:36"
 }
