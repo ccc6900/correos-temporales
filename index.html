@@ -95,7 +95,7 @@ async function waitForNewResult(token,startedAt,oldDate){
   while(Date.now()<deadline){
     try{
       const data=await readResult(token);
-      const resultTime=Date.parse((data.fecha||"").replace(" ","T"));
+      const resultTime=Date.parse((data.fecha||"").replace(" ","T")+"Z");
       const isNew=Number.isFinite(resultTime) && resultTime>=startedAt-5000 && data.fecha!==oldDate;
       if(isNew) return data;
     }catch(error){lastError=error.message;}
