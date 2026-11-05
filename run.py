@@ -152,7 +152,7 @@ def extraer_enlaces(texto):
     texto = html.unescape(texto)
     texto = unquote(texto)
     texto = texto.replace("\\/", "/")
-    urls = re.findall(r"https?://[^\\s<>\\"']+", texto, flags=re.IGNORECASE)
+    urls = re.findall(r"""https?://[^\s<>"']+""", texto, flags=re.IGNORECASE)
     plus = ""
     standard = ""
 
