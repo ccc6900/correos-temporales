@@ -1,137 +1,134 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador M3U Automático</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background-color: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 480px; text-align: center; }
-        h2 { margin-top: 0; color: #38bdf8; }
-        p { color: #94a3b8; font-size: 14px; }
-        button { background-color: #0284c7; color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; transition: background 0.2s; }
-        button:hover { background-color: #0369a1; }
-        button:disabled { background-color: #334155; cursor: not-allowed; }
-        #status { margin-top: 15px; font-size: 14px; color: #cbd5e1; min-height: 20px; }
-        .result-box { margin-top: 25px; background: #0f172a; padding: 18px; border-radius: 8px; text-align: left; display: none; border: 1px solid #334155; }
-        .result-box h3 { margin-top: 0; font-size: 16px; color: #4ade80; }
-        .field { margin-bottom: 15px; text-align: left; }
-        .field label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px; }
-        .field input { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #475569; color: #fff; border-radius: 4px; font-size: 12px; box-sizing: border-box; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestor de correos temporales</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:28px 16px;display:grid;place-items:center;background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.card{width:min(100%,620px);background:#1e293b;border:1px solid #334155;border-radius:16px;padding:26px;box-shadow:0 18px 50px #0005}
+h1{font-size:25px;margin:0 0 8px;color:#7dd3fc}
+.intro{color:#cbd5e1;margin:0 0 22px;line-height:1.5}
+label{display:block;font-size:13px;color:#cbd5e1;margin:0 0 7px}
+input{width:100%;padding:12px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#f8fafc}
+button{width:100%;margin-top:14px;padding:13px;border:0;border-radius:9px;background:#0284c7;color:white;font-weight:700;font-size:15px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+#status{margin-top:17px;padding:12px;border-radius:8px;background:#0f172a;color:#cbd5e1;min-height:44px;line-height:1.45;overflow-wrap:anywhere}
+#results{display:none;margin-top:20px}
+.item{padding:13px;margin-top:10px;border:1px solid #475569;border-radius:9px;background:#0f172a}
+.item small{display:block;color:#94a3b8;margin-bottom:6px}
+.value{overflow-wrap:anywhere;line-height:1.5}
+a{color:#7dd3fc}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.actions button{width:auto;flex:1;margin:0;padding:9px}
+.note{font-size:12px;color:#94a3b8;margin-top:16px;line-height:1.5}
+</style>
 </head>
 <body>
+<main class="card">
+<h1>Gestor de correos temporales</h1>
+<p class="intro">Inicia el proceso y consulta aquí el alias utilizado y los enlaces que encuentre la automatización.</p>
+<label for="token">Token de GitHub (necesita permiso para ejecutar Actions)</label>
+<input id="token" type="password" autocomplete="off" placeholder="Pega tu token de GitHub">
+<button id="start">Iniciar generación</button>
+<div id="status" role="status" aria-live="polite">Preparado. Introduce tu token para comenzar.</div>
+<section id="results" aria-live="polite">
+<h2>Resultado de la ejecución</h2>
+<div class="item"><small>Estado</small><div class="value" id="rEstado">—</div></div>
+<div class="item"><small>Alias seleccionado</small><div class="value" id="rAlias">—</div><div class="actions"><button id="copyAlias" type="button">Copiar alias</button></div></div>
+<div class="item"><small>Enlace final</small><div class="value" id="rUrl">—</div></div>
+<div class="item"><small>Lista M3U Plus</small><div class="value" id="rPlus">—</div><div class="actions"><button id="copyPlus" type="button">Copiar enlace Plus</button></div></div>
+<div class="item"><small>Lista M3U Standard</small><div class="value" id="rStandard">—</div><div class="actions"><button id="copyStandard" type="button">Copiar enlace Standard</button></div></div>
+<div class="item"><small>Fecha del resultado</small><div class="value" id="rFecha">—</div></div>
+</section>
+<p class="note">El token solo se mantiene en esta pestaña y no se guarda en el almacenamiento del navegador. La página consulta el archivo result.json hasta detectar un resultado más reciente que el anterior.</p>
+</main>
+<script>
+const OWNER = "ccc6900";
+const REPO = "correos-temporales";
+const WORKFLOW = "run.yml";
+const BRANCH = "main";
+const $ = id => document.getElementById(id);
+let currentResult = null;
+let busy = false;
 
-    <div class="card">
-        <h2>Panel de Generación M3U</h2>
-        <p>Introduce tu token de GitHub para iniciar el proceso.</p>
-        
-        <div class="field">
-            <label>GitHub Personal Access Token (ghp_...):</label>
-            <input type="password" id="inputToken" placeholder="Pega aquí tu token seguro...">
-        </div>
+function setStatus(message){ $("status").textContent = message; }
+function setValue(id,value){ $(id).textContent = value || "No disponible"; }
+function showLink(id,value){
+  const node = $(id);
+  node.replaceChildren();
+  if(value && /^https?:\/\//i.test(value)){
+    const a=document.createElement("a"); a.href=value; a.textContent=value; a.target="_blank"; a.rel="noopener noreferrer"; node.append(a);
+  } else node.textContent=value || "No encontrado";
+}
+async function copyValue(value){
+  if(!value || value==="NO_ENCONTRADO_REVISAR_LOGS"){setStatus("No hay ningún enlace que copiar.");return;}
+  try{await navigator.clipboard.writeText(value);setStatus("Copiado al portapapeles.");}
+  catch(e){setStatus("No se pudo copiar automáticamente. Selecciona el texto y cópialo manualmente.");}
+}
+function render(data){
+  currentResult=data;
+  $("results").style.display="block";
+  setValue("rEstado",data.estado);
+  setValue("rAlias",data.alias);
+  showLink("rUrl",data.url_final);
+  showLink("rPlus",data.m3u_plus);
+  showLink("rStandard",data.m3u_standard);
+  setValue("rFecha",data.fecha);
+}
+$("copyAlias").addEventListener("click",()=>copyValue(currentResult?.alias));
+$("copyPlus").addEventListener("click",()=>copyValue(currentResult?.m3u_plus));
+$("copyStandard").addEventListener("click",()=>copyValue(currentResult?.m3u_standard));
 
-        <button id="btnGenerar" onclick="lanzarGeneracion()">Generar Cuenta y Listas</button>
-        <div id="status"></div>
-
-        <div id="resultadoBox" class="result-box">
-            <h3>¡Proceso Completado!</h3>
-            <div class="field">
-                <label>Alias utilizado:</label>
-                <input type="text" id="resAlias" readonly>
-            </div>
-            <div class="field">
-                <label>Lista M3U Plus:</label>
-                <input type="text" id="resPlus" readonly onclick="this.select()">
-            </div>
-            <div class="field">
-                <label>Lista M3U Standard:</label>
-                <input type="text" id="resStandard" readonly onclick="this.select()">
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const GITHUB_USER = "ccc6900";
-        const REPO_NAME = "correos-temporales";
-
-        // Al cargar la página, recupera el token guardado si existe en este dispositivo
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedToken = localStorage.getItem("github_token");
-            if (savedToken) {
-                document.getElementById("inputToken").value = savedToken;
-            }
-        });
-
-        async function lanzarGeneracion() {
-            const tokenInput = document.getElementById("inputToken").value.trim();
-
-            if (!tokenInput) {
-                alert("Por favor, introduce tu Token de GitHub en la casilla.");
-                return;
-            }
-
-            // Guarda el token en la memoria del navegador del dispositivo actual
-            localStorage.setItem("github_token", tokenInput);
-
-            const btn = document.getElementById("btnGenerar");
-            const status = document.getElementById("status");
-            const box = document.getElementById("resultadoBox");
-
-            btn.disabled = true;
-            box.style.display = "none";
-            status.innerHTML = "🚀 Enviando orden a GitHub Actions...";
-
-            const url = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/actions/workflows/run.yml/dispatches`;
-
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${tokenInput}`,
-                        'Accept': 'application/vnd.github+json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ ref: 'main' })
-                });
-
-                if (response.ok) {
-                    status.innerHTML = "⏳ Registro en proceso... Esperando datos (aprox. 30-40s)...";
-                    monitorearResultado();
-                } else if (response.status === 401) {
-                    status.innerHTML = "❌ Error 401: Token inválido o revocado. Revisa tus permisos.";
-                    btn.disabled = false;
-                } else {
-                    status.innerHTML = "❌ Error al iniciar. Código: " + response.status;
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                status.innerHTML = "❌ Error de conexión: " + err.message;
-                btn.disabled = false;
-            }
-        }
-
-        function monitorearResultado() {
-            const intervalo = setInterval(async () => {
-                try {
-                    const res = await fetch('result.json?_=' + new Date().getTime());
-                    if (res.ok) {
-                        const data = await res.json();
-                        
-                        document.getElementById("resAlias").value = data.alias;
-                        document.getElementById("resPlus").value = data.m3u_plus;
-                        document.getElementById("resStandard").value = data.m3u_standard;
-
-                        document.getElementById("resultadoBox").style.display = "block";
-                        document.getElementById("status").innerHTML = "✅ ¡Listas generadas correctamente!";
-                        document.getElementById("btnGenerar").disabled = false;
-                        clearInterval(intervalo);
-                    }
-                } catch (e) {
-                    // Esperando respuesta del archivo result.json...
-                }
-            }, 8000);
-        }
-    </script>
+async function readResult(token){
+  const url=`https://api.github.com/repos/${OWNER}/${REPO}/contents/result.json?ref=${BRANCH}&_=${Date.now()}`;
+  const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`,Accept:"application/vnd.github.raw+json"},cache:"no-store"});
+  if(!response.ok) throw new Error("No se pudo consultar result.json (HTTP "+response.status+").");
+  const data=await response.json();
+  return data;
+}
+async function waitForNewResult(token,startedAt,oldDate){
+  const deadline=Date.now()+6*60*1000;
+  let lastError="";
+  while(Date.now()<deadline){
+    try{
+      const data=await readResult(token);
+      const resultTime=Date.parse((data.fecha||"").replace(" ","T"));
+      const isNew=Number.isFinite(resultTime) && resultTime>=startedAt-5000 && data.fecha!==oldDate;
+      if(isNew) return data;
+    }catch(error){lastError=error.message;}
+    await new Promise(resolve=>setTimeout(resolve,5000));
+    setStatus("La automatización sigue trabajando. Comprobando si ya hay un resultado nuevo…");
+  }
+  throw new Error(lastError || "La ejecución no ha publicado un resultado nuevo en 6 minutos. Revisa la pestaña Actions de GitHub para ver si el proceso terminó con error.");
+}
+async function launch(){
+  if(busy)return;
+  const token=$("token").value.trim();
+  if(!token){setStatus("Introduce tu token de GitHub.");return;}
+  busy=true; $("start").disabled=true; $("results").style.display="none";
+  const startedAt=Date.now(); const previousDate=currentResult?.fecha || "";
+  setStatus("Enviando la orden a GitHub Actions…");
+  try{
+    const url=`https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`;
+    const response=await fetch(url,{method:"POST",headers:{Authorization:`Bearer ${token}`,Accept:"application/vnd.github+json","Content-Type":"application/json","X-GitHub-Api-Version":"2022-11-28"},body:JSON.stringify({ref:BRANCH})});
+    if(response.status!==204) {
+      let detail=""; try{detail=(await response.json()).message||"";}catch(e){}
+      throw new Error("GitHub no pudo iniciar el proceso (HTTP "+response.status+"). "+detail+" Comprueba el token y sus permisos Actions.");
+    }
+    setStatus("Orden recibida. Esperando a que termine el proceso…");
+    const data=await waitForNewResult(token,startedAt,previousDate);
+    render(data);
+    if(data.estado==="AGOTADO") setStatus(data.mensaje || "No quedan alias disponibles.");
+    else if(data.estado==="OK") setStatus("Proceso terminado. Resultado actualizado correctamente.");
+    else setStatus("La automatización ha publicado un resultado con estado: "+(data.estado||"desconocido"));
+  }catch(error){setStatus("Error: "+error.message);}
+  finally{busy=false;$("start").disabled=false;}
+}
+$("start").addEventListener("click",launch);
+$("token").addEventListener("keydown",event=>{if(event.key==="Enter")launch();});
+</script>
 </body>
 </html>
