@@ -130,6 +130,62 @@ def leer_correo_nuevo(alias, desde, timeout_segundos=TIMEOUT_CORREO, descripcion
     return None
 
 
+def leer_correo_con_enlaces(alias, desde, timeout_segundos=180):
+    """Busca el correo de resultados desde el inicio de la prueba.
+    No usa la hora posterior a la verificación: el mensaje puede haber llegado antes.
+    """
+    servidor = "imap.gmx.es" if GMX_USER.lower().endswith(".es") else "imap.gmx.com"
+    fin = time.time() + timeout_segundos
+    print(f"[*] Buscando el correo de resultados recibido desde el inicio de la prueba para {alias}...")
+
+    while time.time() < fin:
+        mail = None
+        try:
+            mail = imaplib.IMAP4_SSL(servidor, 993)
+            mail.login(GMX_USER, GMX_PASS)
+            estado, _ = mail.select("INBOX")
+            if estado != "OK":
+                raise RuntimeError("No se pudo abrir la bandeja INBOX.")
+
+            estado, datos = mail.search(None, "ALL")
+            if estado == "OK" and datos and datos[0]:
+                ids = datos[0].split()[-60:]
+                for msg_id in reversed(ids):
+                    estado_fetch, contenido = mail.fetch(msg_id, "(RFC822)")
+                    if estado_fetch != "OK":
+                        continue
+                    for elemento in contenido:
+                        if not isinstance(elemento, tuple):
+                            continue
+                        msg = email.message_from_bytes(elemento[1])
+                        timestamp = fecha_mensaje(msg)
+                        if timestamp is None or timestamp < desde:
+                            continue
+                        if not mensaje_es_para_alias(msg, alias):
+                            continue
+
+                        cuerpo = obtener_cuerpo(msg)
+                        asunto = decodificar_cabecera(msg.get("Subject", ""))
+                        plus, standard = extraer_enlaces(cuerpo)
+                        if plus or standard:
+                            print(f"[+] Correo con enlaces localizado: {asunto}")
+                            return cuerpo
+                        print(f"[*] Correo recibido para el alias, pero sin enlaces M3U: {asunto}")
+
+        except Exception as exc:
+            print(f"[-] Error buscando correo de resultados por IMAP: {exc}")
+        finally:
+            if mail is not None:
+                try:
+                    mail.logout()
+                except Exception:
+                    pass
+        time.sleep(INTERVALO_CONSULTA)
+
+    print("[-] No se localizó un correo nuevo que contenga enlaces M3U.")
+    return None
+
+
 def extraer_codigo(texto):
     if not texto:
         return None
@@ -254,10 +310,10 @@ def main():
                 campo_codigo.press("Enter")
 
             # Esperar el segundo correo: los enlaces pueden no aparecer en pantalla.
-            correo_resultados = leer_correo_nuevo(
+            correo_resultados = leer_correo_con_enlaces(
                 ALIAS_CORREO,
-                time.time(),
-                descripcion="correo con los resultados",
+                inicio_prueba,
+                timeout_segundos=180,
             )
 
             pagina.wait_for_timeout(4000)
