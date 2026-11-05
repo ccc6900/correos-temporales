@@ -1,8 +1,9 @@
 {
-    "estado": "OK",
-    "alias": "alicia.morales2@gmx.es",
-    "url_final": "https://www.123prueba.net/verify/XNX5ABQ4SFEDKGUXN2ARJ6LLX4Q56BDP",
-    "m3u_plus": "NO_ENCONTRADO_REVISAR_LOGS",
-    "m3u_standard": "NO_ENCONTRADO_REVISAR_LOGS",
-    "fecha": "2026-11-05 16:27:31"
+    "estado": "INCOMPLETO",
+    "alias": "auto.notifier.es@gmx.es",
+    "url_final": "https://www.123prueba.net/",
+    "m3u_plus": "",
+    "m3u_standard": "",
+    "mensaje": "No se recibió un correo de verificación nuevo o no se pudo identificar su código.",
+    "fecha": "2026-11-05 16:51:33"
 }
