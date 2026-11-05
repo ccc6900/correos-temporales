@@ -134,7 +134,7 @@ def leer_correo_con_enlaces(alias, desde, timeout_segundos=180):
     """Busca el correo de resultados desde el inicio de la prueba.
     No usa la hora posterior a la verificación: el mensaje puede haber llegado antes.
     """
-    servidor = "imap.gmx.es" if GMX_USER.lower().endswith(".es") else "imap.gmx.com"
+    servidor = "imap.gmx.com" if GMX_USER.lower().endswith(".es") else "imap.gmx.com"
     fin = time.time() + timeout_segundos
     print(f"[*] Buscando el correo de resultados recibido desde el inicio de la prueba para {alias}...")
 
