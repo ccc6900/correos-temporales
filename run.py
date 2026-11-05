@@ -1,225 +1,303 @@
 import os
 import time
-import random
 import json
 import imaplib
 import email
 import re
+import html
+import quopri
+from datetime import datetime, timezone
+from email.header import decode_header, make_header
+from email.utils import parsedate_to_datetime
+from urllib.parse import unquote
 from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("TARGET_URL")
 GMX_USER = os.environ.get("GMX_USER")
 GMX_PASS = os.environ.get("GMX_PASS")
 
-ALIAS_TOTALES = [
-    "alicia.morales2@gmx.es",
-    "andres.navas@gmx.es",
-    "beatriz.robles@gmx.es",
-    "diego.pastor2@gmx.es",
-    "irene.castello@gmx.es",
-    "marcos.solis@gmx.es",
-    "natalia.vega2@gmx.es",
-    "pablo.cabrera@gmx.es",
-    "valeria.guerrero@gmx.es"
-]
+# Se utiliza una única dirección autorizada para la prueba.
+# Si necesitas cambiarla, sustituye este valor por otro alias válido de tu cuenta.
+ALIAS_CORREO = "auto.notifier.es@gmx.es"
 
 ARCHIVO_ESTADO = "usados.json"
+TIMEOUT_CORREO = 120
+INTERVALO_CONSULTA = 5
 
-def cargar_estado():
-    if os.path.exists(ARCHIVO_ESTADO):
+
+def guardar_resultado(datos):
+    datos["fecha"] = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    with open("result.json", "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=4, ensure_ascii=False)
+
+
+def decodificar_cabecera(valor):
+    if not valor:
+        return ""
+    try:
+        return str(make_header(decode_header(valor)))
+    except Exception:
+        return str(valor)
+
+
+def obtener_cuerpo(msg):
+    partes = []
+    if msg.is_multipart():
+        for parte in msg.walk():
+            if parte.get_content_maintype() == "multipart":
+                continue
+            if parte.get_content_disposition() == "attachment":
+                continue
+            if parte.get_content_type() not in ("text/plain", "text/html"):
+                continue
+            contenido = parte.get_payload(decode=True)
+            if contenido is None:
+                continue
+            charset = parte.get_content_charset() or "utf-8"
+            partes.append(contenido.decode(charset, errors="replace"))
+    else:
+        contenido = msg.get_payload(decode=True)
+        if contenido is not None:
+            charset = msg.get_content_charset() or "utf-8"
+            partes.append(contenido.decode(charset, errors="replace"))
+    return "\n".join(partes)
+
+
+def fecha_mensaje(msg):
+    valor = msg.get("Date")
+    if not valor:
+        return None
+    try:
+        fecha = parsedate_to_datetime(valor)
+        if fecha.tzinfo is None:
+            fecha = fecha.replace(tzinfo=timezone.utc)
+        return fecha.timestamp()
+    except Exception:
+        return None
+
+
+def mensaje_es_para_alias(msg, alias):
+    campos = ("To", "Cc", "Delivered-To", "X-Original-To", "Envelope-To")
+    destinatarios = " ".join(str(msg.get(campo, "")) for campo in campos)
+    return alias.lower() in destinatarios.lower()
+
+
+def leer_correo_nuevo(alias, desde, timeout_segundos=TIMEOUT_CORREO, descripcion="correo"):
+    servidor = "imap.gmx.es" if GMX_USER.lower().endswith(".es") else "imap.gmx.com"
+    fin = time.time() + timeout_segundos
+    print(f"[*] Esperando {descripcion} nuevo para {alias}...")
+
+    while time.time() < fin:
+        mail = None
         try:
-            with open(ARCHIVO_ESTADO, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
+            mail = imaplib.IMAP4_SSL(servidor, 993)
+            mail.login(GMX_USER, GMX_PASS)
+            estado, _ = mail.select("INBOX")
+            if estado != "OK":
+                raise RuntimeError("No se pudo abrir la bandeja INBOX.")
 
-def guardar_estado(usados):
-    with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
-        json.dump(usados, f, indent=4, ensure_ascii=False)
-
-def seleccionar_alias():
-    usados = cargar_estado()
-    disponibles = [a for a in ALIAS_TOTALES if a not in usados]
-    
-    print(f"[*] Alias ya usados registrados: {usados}")
-    print(f"[*] Alias disponibles en este ciclo: {disponibles}")
-
-    if not disponibles:
-        print("[!] ¡Atención: Se han agotado todos los alias!")
-        return None, usados
-        
-    alias = random.choice(disponibles)
-    print(f"\n[+] -> ALIAS SELECCIONADO PARA ESTA SESIÓN: {alias}\n")
-    return alias, usados
-
-def leer_correo_imap_para_alias(user, password, alias_objetivo, timeout_segundos=60):
-    print(f"[*] Conectando al IMAP de GMX buscando correo para: {alias_objetivo}...")
-    inicio = time.time()
-    servidor_imap = "imap.gmx.es" if user.endswith(".es") else "imap.gmx.com"
-    
-    while time.time() - inicio < timeout_segundos:
-        try:
-            mail = imaplib.IMAP4_SSL(servidor_imap, 993)
-            mail.login(user, password)
-            mail.select("INBOX")
-            
-            status, messages = mail.search(None, 'ALL')
-            if status == 'OK' and messages[0]:
-                ids = messages[0].split()
+            estado, datos = mail.search(None, "ALL")
+            if estado == "OK" and datos and datos[0]:
+                ids = datos[0].split()[-40:]
                 for msg_id in reversed(ids):
-                    res, msg_data = mail.fetch(msg_id, '(RFC822)')
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
-                            destinatario = msg.get("To", "")
-                            
-                            if alias_objetivo.lower() in destinatario.lower():
-                                cuerpo = ""
-                                if msg.is_multipart():
-                                    for part in msg.walk():
-                                        if part.get_content_type() in ["text/plain", "text/html"]:
-                                            cuerpo = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                            break
-                                else:
-                                    cuerpo = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                
-                                mail.logout()
-                                print(f"[+] ¡Correo encontrado y validado para {alias_objetivo}!")
-                                return cuerpo
-            mail.logout()
-        except Exception as e:
-            print(f"[-] Error reconectando IMAP: {e}")
-        time.sleep(5)
+                    estado_fetch, contenido = mail.fetch(msg_id, "(RFC822)")
+                    if estado_fetch != "OK":
+                        continue
+                    for elemento in contenido:
+                        if not isinstance(elemento, tuple):
+                            continue
+                        msg = email.message_from_bytes(elemento[1])
+                        timestamp = fecha_mensaje(msg)
+                        if timestamp is None or timestamp < desde:
+                            continue
+                        if not mensaje_es_para_alias(msg, alias):
+                            continue
+                        cuerpo = obtener_cuerpo(msg)
+                        asunto = decodificar_cabecera(msg.get("Subject", ""))
+                        print(f"[+] Correo nuevo encontrado: {asunto}")
+                        return cuerpo
+        except Exception as exc:
+            print(f"[-] Error IMAP: {exc}")
+        finally:
+            if mail is not None:
+                try:
+                    mail.logout()
+                except Exception:
+                    pass
+        time.sleep(INTERVALO_CONSULTA)
+
+    print(f"[-] No llegó el {descripcion} dentro del tiempo de espera.")
     return None
 
+
+def extraer_codigo(texto):
+    if not texto:
+        return None
+    texto = html.unescape(texto)
+    patrones = [
+        r"(?:c[oó]digo|code|verificaci[oó]n|verification)[^0-9]{0,50}(\d{4,8})",
+        r"\b(\d{6})\b",
+        r"\b(\d{4,5})\b",
+    ]
+    for patron in patrones:
+        coincidencia = re.search(patron, texto, re.IGNORECASE)
+        if coincidencia:
+            return coincidencia.group(1)
+    return None
+
+
 def extraer_enlaces(texto):
-    p_plus, p_std = "", ""
-    texto_limpio = texto.replace('%3F', '?').replace('%26', '&').replace('%3D', '=')
-    urls = re.findall(r'https?://[^\s<>"\']+', texto_limpio)
-    
-    for u in urls:
-        if "m3u" in u.lower() or "get.php" in u.lower():
-            if "plus" in u.lower() or "type=m3u_plus" in u.lower():
-                if not p_plus: p_plus = u
-            elif "type=m3u" in u.lower() and "plus" not in u.lower():
-                if not p_std: p_std = u
-            elif not p_std and "plus" not in u.lower():
-                p_std = u
-    return p_plus, p_std
+    if not texto:
+        return "", ""
+    texto = html.unescape(texto)
+    texto = unquote(texto)
+    texto = texto.replace("\\/", "/")
+    urls = re.findall(r"https?://[^\\s<>\\"']+", texto, flags=re.IGNORECASE)
+    plus = ""
+    standard = ""
+
+    for url in urls:
+        url = url.rstrip(".,);]}")
+        bajo = url.lower()
+        parece_m3u = "m3u" in bajo or "get.php" in bajo
+        if not parece_m3u:
+            continue
+        if "plus" in bajo or "type=m3u_plus" in bajo:
+            if not plus:
+                plus = url
+        elif not standard:
+            standard = url
+
+    return plus, standard
+
 
 def main():
     if not TARGET_URL or not GMX_USER or not GMX_PASS:
-        raise Exception("[-] Faltan secretos requeridos.")
+        raise RuntimeError("Faltan los Secrets TARGET_URL, GMX_USER o GMX_PASS.")
 
-    usados = cargar_estado()
-    alias_correo, _ = seleccionar_alias()
+    resultado = {
+        "estado": "INCOMPLETO",
+        "alias": ALIAS_CORREO,
+        "url_final": "",
+        "m3u_plus": "",
+        "m3u_standard": "",
+        "mensaje": "",
+    }
 
-    if not alias_correo:
-        resultado = {
-            "estado": "AGOTADO",
-            "mensaje": "¡Todos los alias de GMX se han agotado!",
-            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        with open("result.json", "w", encoding="utf-8") as f:
-            json.dump(resultado, f, indent=4, ensure_ascii=False)
-        return
+    inicio_prueba = time.time()
 
-    if alias_correo not in usados:
-        usados.append(alias_correo)
-        guardar_estado(usados)
+    try:
+        with sync_playwright() as playwright:
+            navegador = playwright.firefox.launch(headless=True)
+            contexto = navegador.new_context()
+            pagina = contexto.new_page()
 
-    with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
+            print(f"[*] Abriendo la página configurada: {TARGET_URL}")
+            pagina.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
+            pagina.wait_for_timeout(3000)
 
-        print(f"[*] Accediendo a: {TARGET_URL}")
-        page.goto(TARGET_URL)
-        page.wait_for_timeout(4000)
+            campo_email = pagina.locator(
+                "input[type='email'], input[name*='email' i], "
+                "input[placeholder*='correo' i], input[placeholder*='email' i]"
+            ).first
 
-        # SELECCIÓN PRECISA: Buscar el campo de email de forma exacta
-        email_input = page.locator("input[type='email'], input[name*='email'], input[placeholder*='correo'], input[placeholder*='email']").first
-        if email_input.count() == 0:
-            email_input = page.locator("input[type='text']").first
+            if campo_email.count() == 0:
+                raise RuntimeError("No se encontró el campo de correo electrónico.")
 
-        email_input.click()
-        email_input.press("Control+A")
-        email_input.press("Backspace")
-        email_input.fill(alias_correo)
-        
-        # VERIFICACIÓN EN LOGS: Comprobar que la web ha registrado el valor exacto
-        valor_en_web = email_input.input_value()
-        print(f"[*] Verificación input web -> Escrito: '{alias_correo}' | Detectado en campo: '{valor_en_web}'")
+            campo_email.fill(ALIAS_CORREO)
+            if campo_email.input_value().strip().lower() != ALIAS_CORREO.lower():
+                raise RuntimeError("La página no conserva la dirección escrita.")
 
-        # BUSCAR BOTÓN DE ENVÍO ESPECÍFICO (evitando clics en elementos erróneos)
-        submit_btn = page.locator("button[type='submit'], input[type='submit'], button:has-text('Enviar'), button:has-text('Generar'), button:has-text('Continuar'), button:has-text('Registrar')").first
-        if submit_btn.count() > 0:
-            submit_btn.click()
-        else:
-            page.keyboard.press("Enter")
+            boton = pagina.locator(
+                "button[type='submit'], input[type='submit'], "
+                "button:has-text('Enviar'), button:has-text('Continuar')"
+            ).first
+            if boton.count():
+                boton.click()
+            else:
+                campo_email.press("Enter")
 
-        print("[*] Formulario enviado. Esperando correo de verificación específico...")
+            correo_verificacion = leer_correo_nuevo(
+                ALIAS_CORREO, inicio_prueba, descripcion="correo de verificación"
+            )
+            codigo = extraer_codigo(correo_verificacion)
 
-        cuerpo_correo = leer_correo_imap_para_alias(GMX_USER, GMX_PASS, alias_correo)
+            if not codigo:
+                resultado["mensaje"] = (
+                    "No se recibió un correo de verificación nuevo o no se pudo "
+                    "identificar su código."
+                )
+                resultado["url_final"] = pagina.url
+                navegador.close()
+                guardar_resultado(resultado)
+                return
 
-        codigo = None
-        if cuerpo_correo:
-            match_codigo = re.search(r'\b\d{4,6}\b', cuerpo_correo)
-            codigo = match_codigo.group(0) if match_codigo else None
+            print("[+] Código de verificación localizado.")
+            pagina.wait_for_timeout(2000)
+            selector_codigo = (
+                "input[name*='code' i], input[id*='code' i], "
+                "input[autocomplete='one-time-code'], input[type='number'], "
+                "input[type='tel']"
+            )
+            campo_codigo = pagina.locator(selector_codigo).first
+            campo_codigo.wait_for(state="visible", timeout=20000)
+            campo_codigo.fill(codigo)
 
-        if codigo:
-            print(f"[*] Código aplicado: {codigo}")
-            page.wait_for_timeout(3000)
-            selector_codigo = "input[type='text'], input[type='number'], input[type='tel'], input[name*='code'], input[id*='code']"
+            boton_codigo = pagina.locator(
+                "button[type='submit'], input[type='submit'], "
+                "button:has-text('Verificar'), button:has-text('Continuar'), "
+                "button:has-text('Confirmar')"
+            ).first
+            if boton_codigo.count():
+                boton_codigo.click()
+            else:
+                campo_codigo.press("Enter")
+
+            # Esperar el segundo correo: los enlaces pueden no aparecer en pantalla.
+            correo_resultados = leer_correo_nuevo(
+                ALIAS_CORREO,
+                time.time(),
+                descripcion="correo con los resultados",
+            )
+
+            pagina.wait_for_timeout(4000)
             try:
-                campo = page.locator(selector_codigo).first
-                campo.wait_for(state="visible", timeout=15000)
-                campo.fill(codigo)
-                page.keyboard.press("Enter")
+                texto_pantalla = pagina.locator("body").inner_text(timeout=10000)
             except Exception:
-                inputs = page.locator("input").all()
-                for idx, char in enumerate(codigo):
-                    if idx < len(inputs):
-                        inputs[idx].fill(char)
-                page.keyboard.press("Enter")
-            
-            try:
-                print("[*] Esperando pantalla final (/plan/)...")
-                page.wait_for_url("**/plan/**", timeout=15000)
-            except Exception:
-                page.wait_for_timeout(10000)
+                texto_pantalla = ""
 
-        texto_pantalla = page.inner_text("body")
-        
-        m3u_plus, m3u_standard = extraer_enlaces(texto_pantalla)
+            plus, standard = extraer_enlaces(texto_pantalla)
+            correo_plus, correo_standard = extraer_enlaces(correo_resultados or "")
 
-        if (not m3u_plus or not m3u_standard) and cuerpo_correo:
-            correo_plus, correo_std = extraer_enlaces(cuerpo_correo)
-            if not m3u_plus: m3u_plus = correo_plus
-            if not m3u_standard: m3u_standard = correo_std
+            resultado["m3u_plus"] = plus or correo_plus
+            resultado["m3u_standard"] = standard or correo_standard
+            resultado["url_final"] = pagina.url
 
-        url_final = page.url
+            if resultado["m3u_plus"] and resultado["m3u_standard"]:
+                resultado["estado"] = "OK"
+                resultado["mensaje"] = "Se encontraron los dos enlaces."
+            else:
+                faltan = []
+                if not resultado["m3u_plus"]:
+                    faltan.append("M3U Plus")
+                if not resultado["m3u_standard"]:
+                    faltan.append("M3U estándar")
+                resultado["mensaje"] = (
+                    "Proceso realizado, pero faltan enlaces: " + ", ".join(faltan)
+                    + ". Comprueba el correo recibido y la página final."
+                )
 
-        if not m3u_plus:
-            m3u_plus = "NO_ENCONTRADO_REVISAR_LOGS"
-        if not m3u_standard:
-            m3u_standard = "NO_ENCONTRADO_REVISAR_LOGS"
+            navegador.close()
 
-        resultado = {
-            "estado": "OK",
-            "alias": alias_correo,
-            "url_final": url_final,
-            "m3u_plus": m3u_plus,
-            "m3u_standard": m3u_standard,
-            "fecha": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
+    except Exception as exc:
+        resultado["estado"] = "INCOMPLETO"
+        resultado["mensaje"] = f"{type(exc).__name__}: {exc}"
 
-        with open("result.json", "w", encoding="utf-8") as f:
-            json.dump(resultado, f, indent=4, ensure_ascii=False)
-        print("[+] Archivo result.json generado con éxito.")
+    guardar_resultado(resultado)
+    print(f"[*] Estado final: {resultado['estado']}")
+    print(f"[*] Diagnóstico: {resultado['mensaje']}")
+    print("[+] result.json guardado.")
 
-        browser.close()
 
 if __name__ == "__main__":
     main()
